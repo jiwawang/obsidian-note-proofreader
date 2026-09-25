@@ -1,7 +1,7 @@
 {
   "id": "note-proofreader",
   "name": "Note Proofreader",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.11.4",
   "description": "Fact-check a selected passage with an LLM (DeepSeek, Gemini, Claude...) and write corrections back in place with a particle animation. Keeps your own wording.",
   "author": "Jingwen Wang",

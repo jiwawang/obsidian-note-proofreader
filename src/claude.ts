@@ -11,15 +11,31 @@ export interface ReviewInput {
 	extra: string;
 }
 
+export interface ReviewResult {
+	revised: string;
+	verdict: "correct" | "corrected";
+	/** Short feedback for the author: what was checked, what (if anything) was wrong, and a one-breath recap. */
+	explanation: string;
+}
+
 const RESULT_SCHEMA = {
 	type: "object",
 	properties: {
+		verdict: {
+			type: "string",
+			enum: ["correct", "corrected"],
+			description: '"correct" when the passage needed no change, "corrected" when something was fixed.',
+		},
+		explanation: {
+			type: "string",
+			description: "Feedback for the author, in the passage's language, following the rules in the system prompt.",
+		},
 		revised: {
 			type: "string",
 			description: "The passage with only the required corrections applied; identical to the original when nothing needs to change.",
 		},
 	},
-	required: ["revised"],
+	required: ["verdict", "explanation", "revised"],
 	additionalProperties: false,
 };
 
@@ -38,7 +54,12 @@ When you are not sure whether something is wrong, because it depends on recent e
 
 Preserve Markdown and Obsidian syntax exactly: headings, list markers and indentation, [[wikilinks]], ![[embeds]], #tags, links, footnotes, callouts, LaTeX ($...$ and $$...$$), inline code and code blocks, and the line-break structure.
 
-Return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.`;
+In "revised", return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.
+
+"explanation" is a short note to the author (2–4 sentences, plain text, no Markdown), written in the passage's own language:
+- If nothing was wrong, open with the equivalent of 「你的思路没有问题，」("Your reasoning holds up — ") and then briefly recap the key point of the passage so the author can confirm their understanding.
+- If something was corrected, first say what was wrong and why, then briefly recap the correct idea. Keep to the errors you actually fixed.
+- Never mention typos, style or wording you left alone.`;
 
 /** System and user prompts shared by every provider. */
 export function buildPrompts(input: ReviewInput, jsonInstruction = ""): { system: string; user: string } {
@@ -71,13 +92,13 @@ const FALLBACK_MODELS = new Set(["claude-opus-5", "claude-opus-5-5", "claude-fab
 
 export class ReviewError extends Error {}
 
-/** Returns the corrected passage. */
+/** Returns the corrected passage plus feedback for the author. */
 export async function reviewPassage(
 	settings: ProofreaderSettings,
 	apiKey: string,
 	input: ReviewInput,
 	signal: AbortSignal,
-): Promise<string> {
+): Promise<ReviewResult> {
 	const client = new Anthropic({
 		apiKey,
 		baseURL: settings.baseURL.trim() || undefined,
@@ -123,16 +144,25 @@ export async function reviewPassage(
 		.filter((b) => b.type === "text")
 		.map((b) => b.text)
 		.join("");
-	let result: { revised?: unknown };
+	let parsed: unknown;
 	try {
-		result = JSON.parse(text) as { revised?: unknown };
+		parsed = JSON.parse(text);
 	} catch {
 		throw new ReviewError("无法解析 Claude 的返回结果，请重试。");
 	}
-	if (typeof result.revised !== "string") {
-		throw new ReviewError("Claude 的返回结果格式不完整，请重试。");
-	}
-	return result.revised;
+	const result = normalizeResult(parsed, input.passage);
+	if (!result) throw new ReviewError("Claude 的返回结果格式不完整，请重试。");
+	return result;
+}
+
+/** Accepts the model's object loosely: only `revised` is essential, the rest is inferred. */
+export function normalizeResult(obj: unknown, original: string): ReviewResult | null {
+	if (!obj || typeof obj !== "object") return null;
+	const o = obj as { revised?: unknown; verdict?: unknown; explanation?: unknown };
+	if (typeof o.revised !== "string") return null;
+	const changed = o.revised.trim() !== original.trim();
+	const verdict = o.verdict === "correct" || o.verdict === "corrected" ? o.verdict : changed ? "corrected" : "correct";
+	return { revised: o.revised, verdict, explanation: typeof o.explanation === "string" ? o.explanation.trim() : "" };
 }
 
 function describeApiError(e: unknown): string {

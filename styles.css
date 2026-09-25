@@ -106,3 +106,28 @@ span:has(> .np-hidden) {
 	font-size: var(--font-ui-smaller);
 	margin: 0 0 4px;
 }
+
+/* ---------- Feedback notice ---------- */
+
+.np-feedback {
+	max-width: 420px;
+	line-height: 1.5;
+}
+
+.np-feedback-title {
+	font-weight: var(--font-semibold);
+	margin-bottom: 4px;
+}
+
+.np-feedback-ok .np-feedback-title {
+	color: var(--color-green);
+}
+
+.np-feedback-fixed .np-feedback-title {
+	color: var(--text-accent);
+}
+
+.np-feedback-body {
+	white-space: pre-wrap;
+	color: var(--text-normal);
+}

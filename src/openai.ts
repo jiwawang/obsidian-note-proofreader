@@ -1,9 +1,9 @@
 import { requestUrl } from "obsidian";
-import { buildPrompts, ReviewError, ReviewInput } from "./claude";
+import { buildPrompts, normalizeResult, ReviewError, ReviewInput, ReviewResult } from "./claude";
 import type { ProofreaderSettings } from "./settings";
 
 const JSON_INSTRUCTION =
-	'Respond with a single JSON object and nothing else: {"revised": "<the passage with only the required corrections; identical to the original when nothing needs to change>"}';
+	'Respond with a single JSON object and nothing else, with exactly these keys: "verdict" ("correct" or "corrected"), "explanation" (the note to the author described above), "revised" (the passage with only the required corrections; identical to the original when nothing needs to change).';
 
 interface ChatResponse {
 	choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> }; finish_reason?: string }>;
@@ -20,7 +20,7 @@ export async function reviewPassageOpenAI(
 	apiKey: string,
 	input: ReviewInput,
 	signal: AbortSignal,
-): Promise<string> {
+): Promise<ReviewResult> {
 	const { system, user } = buildPrompts(input, JSON_INSTRUCTION);
 	const url = `${settings.openaiBaseURL.replace(/\/+$/, "")}/chat/completions`;
 	const body = {
@@ -55,9 +55,9 @@ export async function reviewPassageOpenAI(
 
 	const raw = choice.message?.content;
 	const text = typeof raw === "string" ? raw : (raw ?? []).map((p) => p.text ?? "").join("");
-	const revised = extractRevised(text);
-	if (revised === null) throw new ReviewError("无法解析模型的返回结果，请重试或换一个模型。");
-	return revised;
+	const result = extractResult(text, input.passage);
+	if (!result) throw new ReviewError("无法解析模型的返回结果，请重试或换一个模型。");
+	return result;
 }
 
 async function post(url: string, apiKey: string, body: unknown) {
@@ -80,8 +80,8 @@ async function post(url: string, apiKey: string, body: unknown) {
 	}
 }
 
-/** Pulls `revised` out of the model's reply, tolerating code fences and stray prose. */
-function extractRevised(text: string): string | null {
+/** Pulls the result object out of the model's reply, tolerating code fences and stray prose. */
+function extractResult(text: string, original: string): ReviewResult | null {
 	const candidates = [text.trim()];
 	const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
 	if (fenced) candidates.unshift(fenced[1].trim());
@@ -89,8 +89,8 @@ function extractRevised(text: string): string | null {
 	if (braces) candidates.push(braces[0]);
 	for (const c of candidates) {
 		try {
-			const obj = JSON.parse(c) as { revised?: unknown };
-			if (typeof obj.revised === "string") return obj.revised;
+			const result = normalizeResult(JSON.parse(c), original);
+			if (result) return result;
 		} catch {
 			// try the next shape
 		}

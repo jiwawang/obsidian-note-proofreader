@@ -24,6 +24,8 @@ export interface ProofreaderSettings {
 	animate: boolean;
 	/** Show ==highlights== in light blue instead of the theme's colour. */
 	blueHighlight: boolean;
+	/** How long the feedback note stays on screen, seconds; 0 = until clicked. */
+	feedbackSeconds: number;
 	/** Last "extra requirements" text, pre-filled next time. */
 	lastExtra: string;
 }
@@ -42,6 +44,7 @@ export const DEFAULT_SETTINGS: ProofreaderSettings = {
 	doubleAltMs: 300,
 	animate: true,
 	blueHighlight: true,
+	feedbackSeconds: 20,
 	lastExtra: "",
 };
 
@@ -157,6 +160,20 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.doubleAltMs = v;
+						await save();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("反馈提示停留时间")
+			.setDesc("审阅结束后右上角的说明（“你的思路没有问题…”或“为什么改…”）显示多少秒；0 = 一直显示，点击关闭。")
+			.addSlider((sl) =>
+				sl
+					.setLimits(0, 60, 5)
+					.setValue(s.feedbackSeconds)
+					.setDynamicTooltip()
+					.onChange(async (v) => {
+						s.feedbackSeconds = v;
 						await save();
 					}),
 			);

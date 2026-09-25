@@ -1,8 +1,8 @@
-import { Editor, MarkdownFileInfo, MarkdownView, Menu, Notice, Plugin } from "obsidian";
+import { Editor, MarkdownFileInfo, MarkdownView, Menu, MenuItem, Notice, Plugin } from "obsidian";
 import { Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { animateRevision, clearPending, flashChecked, isAnimating, markPending, proofreaderExtension } from "./animation";
-import { ReviewError, reviewPassage } from "./claude";
+import { ReviewError, reviewPassage, ReviewResult } from "./claude";
 import { reviewPassageOpenAI } from "./openai";
 import { applyPermanentMark, computeHunks, joinRevised } from "./diff";
 import { ExtraRequirementsModal } from "./modal";
@@ -43,6 +43,15 @@ export default class NoteProofreaderPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
+			id: "remove-highlights",
+			name: "取消高亮（选区）",
+			editorCheckCallback: (checking, editor) => {
+				if (!editor.somethingSelected()) return false;
+				if (!checking) this.removeHighlights(editor);
+				return true;
+			},
+		});
+		this.addCommand({
 			id: "cancel",
 			name: "取消正在进行的审阅",
 			editorCheckCallback: (checking, editor) => {
@@ -62,13 +71,21 @@ export default class NoteProofreaderPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!editor.somethingSelected()) return;
-				menu.addItem((item) =>
-					item
-						.setTitle("审阅修改")
-						.setIcon("spell-check")
-						.setSection("selection")
-						.onClick(() => void this.askAndRun(editor, ctx)),
-				);
+				menu.addItem((item) => {
+					item.setTitle("Note Proofreader").setIcon("spell-check").setSection("selection");
+					// setSubmenu exists at runtime but isn't in the public typings; fall back to flat items.
+					const sub = (item as MenuItem & { setSubmenu?: () => Menu }).setSubmenu?.();
+					const target = sub ?? menu;
+					if (!sub) item.setTitle("Note Proofreader：审阅修改").onClick(() => void this.askAndRun(editor, ctx));
+					else target.addItem((i) => i.setTitle("审阅修改").setIcon("spell-check").onClick(() => void this.askAndRun(editor, ctx)));
+					target.addItem((i) =>
+						i
+							.setTitle(sub ? "取消高亮" : "Note Proofreader：取消高亮")
+							.setIcon("eraser")
+							.setSection("selection")
+							.onClick(() => this.removeHighlights(editor)),
+					);
+				});
 			}),
 		);
 
@@ -160,7 +177,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		this.jobs.set(cm, controller);
 		markPending(cm, from, to);
 
-		let revised: string;
+		let result: ReviewResult;
 		try {
 			const input = {
 				passage: original,
@@ -168,7 +185,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 				noteTitle: ctx.file?.basename ?? "",
 				extra,
 			};
-			revised =
+			result =
 				this.settings.provider === "openai"
 					? await reviewPassageOpenAI(this.settings, apiKey, input, controller.signal)
 					: await reviewPassage(this.settings, apiKey, input, controller.signal);
@@ -190,14 +207,36 @@ export default class NoteProofreaderPlugin extends Plugin {
 			new Notice("原文在等待期间被改动，这次的结果没有应用。", 6000);
 			return;
 		}
-		revised = keepOuterWhitespace(original, revised);
+		let revised = keepOuterWhitespace(original, result.revised);
 		if (revised === original) {
 			flashChecked(cm, start, start + original.length, DEFAULT_PARAMS);
+			this.showFeedback(true, result.explanation);
 			return;
 		}
 		const hunks = applyPermanentMark(computeHunks(original, revised), DEFAULT_PARAMS.mark);
 		revised = joinRevised(hunks);
+		this.showFeedback(false, result.explanation, hunks.filter((h) => h.type === "change").length);
 		await animateRevision(cm, start, original, revised, hunks, DEFAULT_PARAMS, this.settings.animate);
+	}
+
+	/** The model's note to the author, as a notice in the corner. Click to dismiss. */
+	private showFeedback(correct: boolean, explanation: string, changes = 0) {
+		const frag = document.createDocumentFragment();
+		const box = frag.createDiv({ cls: `np-feedback ${correct ? "np-feedback-ok" : "np-feedback-fixed"}` });
+		box.createDiv({ cls: "np-feedback-title", text: correct ? "✓ 没有发现问题" : `✎ 已修改 ${changes} 处` });
+		if (explanation) box.createDiv({ cls: "np-feedback-body", text: explanation });
+		new Notice(frag, this.settings.feedbackSeconds * 1000);
+	}
+
+	/** Strips ==highlight== markers inside the selection, as one undoable edit. */
+	private removeHighlights(editor: Editor) {
+		const text = editor.getSelection();
+		const cleaned = text.replace(/==([^=\n]+?)==/g, "$1");
+		if (cleaned === text) {
+			new Notice("选区内没有高亮。");
+			return;
+		}
+		editor.replaceSelection(cleaned);
 	}
 
 	/** Inserts a sample passage and plays its correction; one Ctrl+Z removes both. */
