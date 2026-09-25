@@ -1,0 +1,22 @@
+{
+  "name": "note-proofreader",
+  "version": "0.1.0",
+  "description": "Obsidian plugin: fact-check and polish note passages with an animated rewrite",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "diff": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "builtin-modules": "^5.4.0",
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.13.1",
+    "typescript": "^7.0.2"
+  }
+}

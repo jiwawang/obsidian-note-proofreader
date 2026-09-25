@@ -1,0 +1,108 @@
+/* Fixed light blue, independent of the theme's accent colour. */
+.np-pending,
+.np-changed,
+.np-flash,
+.np-hidden {
+	--np-blue: 110, 180, 255;
+	border-radius: 3px;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+}
+
+/* Waiting for Claude: a light sweeping shimmer over the passage. */
+.np-pending {
+	background-color: rgba(var(--np-blue), 0.16);
+	background-image: linear-gradient(90deg, transparent 0%, rgba(var(--np-blue), 0.42) 50%, transparent 100%);
+	background-size: 200% 100%;
+	animation: np-shimmer 1.5s linear infinite;
+}
+
+@keyframes np-shimmer {
+	from { background-position: 150% 0; }
+	to { background-position: -50% 0; }
+}
+
+/* Text that the particle canvas is drawing on our behalf. Keeps its layout.
+   The :has() clause also blanks a highlight span wrapped around it, so ==marks==
+   don't show their background before their text has formed. */
+.np-hidden,
+.np-hidden *,
+span:has(> .np-hidden) {
+	color: transparent !important;
+	-webkit-text-fill-color: transparent !important;
+	text-shadow: none !important;
+	text-decoration-color: transparent !important;
+	background-color: transparent !important;
+}
+
+/* After the rewrite: changed spots sit on light blue that fades away... */
+.np-changed {
+	animation: np-hold var(--np-hold, 2000ms) ease-in forwards;
+}
+
+@keyframes np-hold {
+	0%, 35% { background-color: rgba(var(--np-blue), 0.32); }
+	100% { background-color: transparent; }
+}
+
+/* ...or are shown bold, easing back to normal weight at the end of the hold. */
+.np-changed-bold {
+	animation: np-hold-bold var(--np-hold, 2000ms) ease-in forwards;
+}
+
+@keyframes np-hold-bold {
+	0%, 80% { font-weight: 700; }
+	100% { font-weight: 400; }
+}
+
+/* Checked, nothing to change: the passage flashes green twice. */
+.np-flash {
+	--np-green: 70, 190, 110;
+	animation: np-flash var(--np-flash, 600ms) ease-in-out forwards;
+}
+
+@keyframes np-flash {
+	0%, 45%, 100% { background-color: transparent; }
+	20%, 70% { background-color: rgba(var(--np-green), 0.4); }
+}
+
+/* The gap left by dissolved text, easing to the width of its replacement. */
+.np-gap {
+	display: inline-block;
+	height: 1em;
+	vertical-align: baseline;
+	transition: width var(--np-shift, 350ms) ease-in-out;
+}
+
+/* Changed text is written as ==highlight==; show highlights light blue when asked. */
+.np-blue-highlight .cm-highlight,
+.np-blue-highlight .markdown-rendered mark,
+.np-blue-highlight .markdown-preview-view mark {
+	background-color: rgba(110, 180, 255, 0.32);
+	color: inherit;
+}
+
+.np-particles {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: 10000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.np-pending { animation: none; }
+	.np-changed, .np-flash { animation-duration: 1ms; }
+}
+
+/* ---------- "Extra requirements" prompt ---------- */
+
+.np-extra-modal .np-extra-input {
+	width: 100%;
+	margin-block: 8px 12px;
+}
+
+.np-extra-modal .np-extra-hint {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	margin: 0 0 4px;
+}
