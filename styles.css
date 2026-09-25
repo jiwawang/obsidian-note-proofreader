@@ -127,7 +127,9 @@ span:has(> .np-hidden) {
 	color: var(--text-accent);
 }
 
+/* Notices draw their own (dark) background; keep their text colour rather than the page's. */
 .np-feedback-body {
 	white-space: pre-wrap;
-	color: var(--text-normal);
+	color: inherit;
+	opacity: 0.92;
 }

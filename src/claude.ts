@@ -56,9 +56,9 @@ Preserve Markdown and Obsidian syntax exactly: headings, list markers and indent
 
 In "revised", return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.
 
-"explanation" is a short note to the author (2–4 sentences, plain text, no Markdown), written in the passage's own language:
-- If nothing was wrong, open with the equivalent of 「你的思路没有问题，」("Your reasoning holds up — ") and then briefly recap the key point of the passage so the author can confirm their understanding.
-- If something was corrected, first say what was wrong and why, then briefly recap the correct idea. Keep to the errors you actually fixed.
+"explanation" is a short note to the author (2–4 sentences, plain text, no Markdown or LaTeX), written in the passage's own language:
+- If nothing was wrong, open with the equivalent of 「你的思路没有问题，」("Your reasoning holds up — ") and then restate, in your own words, what the passage itself says: its claim, the reasoning behind it, and what any formula or number in it expresses. Keep the author's own terms (e.g. their metaphors and variable names). This is a paraphrase of the author's note, not a textbook summary of the topic and not new material, so the author can check that you understood it the way they meant it.
+- If something was corrected, first say what was wrong and why, then restate the corrected idea in the same paraphrasing way. Keep to the errors you actually fixed.
 - Never mention typos, style or wording you left alone.`;
 
 /** System and user prompts shared by every provider. */
