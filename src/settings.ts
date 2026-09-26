@@ -142,8 +142,8 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("触发与动画").setHeading();
 
 		new Setting(containerEl)
-			.setName("双击 Alt 审阅选中文字")
-			.setDesc("连续按两次 Alt（中间不按其他键）直接修正选区内的事实性错误。也可以在「快捷键」里给「审阅修改」命令另外绑键。")
+			.setName("双击 Alt / Option (⌥) 审阅选中文字")
+			.setDesc("连续按两次 Alt（Mac 上是 Option ⌥，中间不按其他键）直接修正选区内的事实性错误。也可以在「快捷键」里给「审阅修改」命令另外绑键。")
 			.addToggle((t) =>
 				t.setValue(s.doubleAlt).onChange(async (v) => {
 					s.doubleAlt = v;

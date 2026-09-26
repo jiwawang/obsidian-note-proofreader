@@ -1,7 +1,7 @@
 import { Editor, MarkdownFileInfo, MarkdownView, Menu, MenuItem, Notice, Plugin } from "obsidian";
 import { Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { animateRevision, clearPending, flashChecked, isAnimating, markPending, proofreaderExtension } from "./animation";
+import { animateRevision, clearPending, flashChecked, isAnimating, markPending, proofreaderExtension, showFeedback } from "./animation";
 import { ReviewError, reviewPassage, ReviewResult } from "./claude";
 import { reviewPassageOpenAI } from "./openai";
 import { applyPermanentMark, computeHunks, joinRevised } from "./diff";
@@ -208,24 +208,17 @@ export default class NoteProofreaderPlugin extends Plugin {
 			return;
 		}
 		let revised = keepOuterWhitespace(original, result.revised);
+		const ms = this.settings.feedbackSeconds * 1000;
 		if (revised === original) {
 			flashChecked(cm, start, start + original.length, DEFAULT_PARAMS);
-			this.showFeedback(true, result.explanation);
+			showFeedback(cm, start + original.length, { kind: "ok", title: "没有发现问题", body: result.explanation }, ms);
 			return;
 		}
 		const hunks = applyPermanentMark(computeHunks(original, revised), DEFAULT_PARAMS.mark);
 		revised = joinRevised(hunks);
-		this.showFeedback(false, result.explanation, hunks.filter((h) => h.type === "change").length);
+		const changes = hunks.filter((h) => h.type === "change").length;
 		await animateRevision(cm, start, original, revised, hunks, DEFAULT_PARAMS, this.settings.animate);
-	}
-
-	/** The model's note to the author, as a notice in the corner. Click to dismiss. */
-	private showFeedback(correct: boolean, explanation: string, changes = 0) {
-		const frag = document.createDocumentFragment();
-		const box = frag.createDiv({ cls: `np-feedback ${correct ? "np-feedback-ok" : "np-feedback-fixed"}` });
-		box.createDiv({ cls: "np-feedback-title", text: correct ? "✓ 没有发现问题" : `✎ 已修改 ${changes} 处` });
-		if (explanation) box.createDiv({ cls: "np-feedback-body", text: explanation });
-		new Notice(frag, this.settings.feedbackSeconds * 1000);
+		showFeedback(cm, start + revised.length, { kind: "fixed", title: `已修改 ${changes} 处`, body: result.explanation }, ms);
 	}
 
 	/** Strips ==highlight== markers inside the selection, as one undoable edit. */

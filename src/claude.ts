@@ -56,10 +56,12 @@ Preserve Markdown and Obsidian syntax exactly: headings, list markers and indent
 
 In "revised", return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.
 
-"explanation" is a short note to the author (2–4 sentences, plain text, no Markdown or LaTeX), written in the passage's own language:
-- If nothing was wrong, open with the equivalent of 「你的思路没有问题，」("Your reasoning holds up — ") and then restate, in your own words, what the passage itself says: its claim, the reasoning behind it, and what any formula or number in it expresses. Keep the author's own terms (e.g. their metaphors and variable names). This is a paraphrase of the author's note, not a textbook summary of the topic and not new material, so the author can check that you understood it the way they meant it.
-- If something was corrected, first say what was wrong and why, then restate the corrected idea in the same paraphrasing way. Keep to the errors you actually fixed.
-- Never mention typos, style or wording you left alone.`;
+"explanation" is feedback from a good teacher to the author (plain text, no Markdown or LaTeX), written in the passage's own language. Up to 5 sentences; shorter is better when there is nothing more worth saying. Rules:
+- Open with a verdict, not a pleasantry: state directly whether the passage is right, and what exactly is right or wrong. Do not use stock openers such as 「你的思路没有问题」 or "Your reasoning holds up".
+- If it is right: name the key insight the author got (the one thing that makes the reasoning work), in one or two sentences, using the author's own terms and metaphors. Do not paraphrase the whole passage back.
+- If something was corrected: say what was wrong and why it is wrong (the root of the confusion, not just the replacement value), then the correct understanding in one sentence.
+- Then, only if there is one, add a single pointed remark a teacher would add: a condition the claim depends on, a case where it breaks down, an easy confusion to watch for, or an imprecision you deliberately left in the text. This may go beyond what you changed. If nothing genuinely useful comes to mind, stop instead of padding.
+- Never comment on typos, grammar, style or wording.`;
 
 /** System and user prompts shared by every provider. */
 export function buildPrompts(input: ReviewInput, jsonInstruction = ""): { system: string; user: string } {

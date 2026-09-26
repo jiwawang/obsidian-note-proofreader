@@ -107,29 +107,116 @@ span:has(> .np-hidden) {
 	margin: 0 0 4px;
 }
 
-/* ---------- Feedback notice ---------- */
+/* ---------- Feedback card: frosted glass floating under the passage ---------- */
+
+.np-feedback-anchor {
+	position: relative;
+	height: 0;
+	overflow: visible;
+	z-index: 20;
+}
 
 .np-feedback {
-	max-width: 420px;
-	line-height: 1.5;
+	position: absolute;
+	top: 8px;
+	left: 0;
+	right: 0;
+	padding: 12px 44px 12px 16px;
+	border-radius: 14px;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small, 13px);
+	line-height: 1.55;
+	white-space: normal;
+	user-select: text;
+	background-color: color-mix(in srgb, var(--background-primary) 62%, transparent);
+	-webkit-backdrop-filter: blur(22px) saturate(170%);
+	backdrop-filter: blur(22px) saturate(170%);
+	border: 1px solid color-mix(in srgb, var(--text-normal) 12%, transparent);
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, white 45%, transparent),
+		0 2px 6px rgba(0, 0, 0, 0.06),
+		0 14px 36px rgba(0, 0, 0, 0.12);
+	animation: np-feedback-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* Specular sheen across the top edge. */
+.np-feedback::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	background: linear-gradient(180deg, color-mix(in srgb, white 28%, transparent), transparent 45%);
+}
+
+.theme-dark .np-feedback,
+[data-theme="dark"] .np-feedback {
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, white 14%, transparent),
+		0 2px 6px rgba(0, 0, 0, 0.25),
+		0 14px 36px rgba(0, 0, 0, 0.4);
+}
+
+.theme-dark .np-feedback::before,
+[data-theme="dark"] .np-feedback::before {
+	background: linear-gradient(180deg, color-mix(in srgb, white 9%, transparent), transparent 45%);
+}
+
+@keyframes np-feedback-in {
+	from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+	to { opacity: 1; transform: none; }
+}
+
+.np-feedback-ok { --np-feedback-accent: var(--color-green); }
+.np-feedback-fixed { --np-feedback-accent: var(--interactive-accent); }
 
 .np-feedback-title {
-	font-weight: var(--font-semibold);
-	margin-bottom: 4px;
+	position: relative;
+	font-weight: var(--font-semibold, 600);
+	margin-bottom: 3px;
 }
 
-.np-feedback-ok .np-feedback-title {
-	color: var(--color-green);
+.np-feedback-title::before {
+	content: "\2713";
+	display: inline-block;
+	margin-right: 6px;
+	color: var(--np-feedback-accent);
 }
 
-.np-feedback-fixed .np-feedback-title {
-	color: var(--text-accent);
+.np-feedback-fixed .np-feedback-title::before {
+	content: "\270E";
 }
 
-/* Notices draw their own (dark) background; keep their text colour rather than the page's. */
 .np-feedback-body {
+	position: relative;
 	white-space: pre-wrap;
-	color: inherit;
-	opacity: 0.92;
+}
+
+/* Round × in the top-right corner, itself a small glass disc. */
+.np-feedback-close {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--text-normal) 10%, transparent);
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--text-normal) 7%, transparent);
+	color: var(--text-muted);
+	font-size: 16px;
+	line-height: 22px;
+	text-align: center;
+	cursor: pointer;
+	box-shadow: none;
+	transition: background-color 120ms, color 120ms;
+}
+
+.np-feedback-close:hover {
+	background: color-mix(in srgb, var(--text-normal) 14%, transparent);
+	color: var(--text-normal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.np-feedback { animation: none; }
 }

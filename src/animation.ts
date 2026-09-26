@@ -4,7 +4,7 @@ import type { Hunk } from "./diff";
 import type { AnimationParams } from "./params";
 import { Glyph, measureGlyphs, ParticleLayer, textWidth } from "./particles";
 
-type Group = "pending" | "hidden" | "changed" | "flash" | "gap";
+type Group = "pending" | "hidden" | "changed" | "flash" | "gap" | "feedback";
 
 interface DecoSpec {
 	from: number;
@@ -23,6 +23,53 @@ const setLock = StateEffect.define<boolean>();
 /** Replace [from, to) of hunk `hid` with an empty inline box `width` px wide (animates via CSS). */
 const setGap = StateEffect.define<{ hid: number; from: number; to: number; width: number; shiftMs: number }>();
 const clearGap = StateEffect.define<number>();
+
+export interface Feedback {
+	kind: "ok" | "fixed";
+	title: string;
+	body: string;
+}
+/** Show a feedback card on its own line right after `pos`'s line. */
+const showFeedbackEffect = StateEffect.define<{ pos: number; feedback: Feedback }>();
+
+class FeedbackWidget extends WidgetType {
+	constructor(readonly feedback: Feedback) {
+		super();
+	}
+	eq(other: FeedbackWidget) {
+		return other.feedback === this.feedback;
+	}
+	toDOM(view: EditorView) {
+		const { kind, title, body } = this.feedback;
+		// A zero-height anchor so the card floats over the lines below instead of pushing them down.
+		const anchor = document.createElement("div");
+		anchor.className = "np-feedback-anchor";
+		const card = anchor.appendChild(document.createElement("div"));
+		card.className = `np-feedback np-feedback-${kind}`;
+		const head = card.appendChild(document.createElement("div"));
+		head.className = "np-feedback-title";
+		head.textContent = title;
+		if (body) {
+			const p = card.appendChild(document.createElement("div"));
+			p.className = "np-feedback-body";
+			p.textContent = body;
+		}
+		const close = card.appendChild(document.createElement("button"));
+		close.type = "button";
+		close.className = "np-feedback-close";
+		close.setAttribute("aria-label", "关闭");
+		close.textContent = "×";
+		close.addEventListener("mousedown", (e) => e.preventDefault());
+		close.addEventListener("click", (e) => {
+			e.preventDefault();
+			hideFeedback(view);
+		});
+		return anchor;
+	}
+	ignoreEvent() {
+		return true;
+	}
+}
 
 class GapWidget extends WidgetType {
 	constructor(
@@ -60,6 +107,14 @@ const decoField = StateField.define<DecorationSet>({
 				decos = decos.update({ filter: (_f, _t, d) => d.spec.group !== e.value });
 			} else if (e.is(unhide)) {
 				decos = decos.update({ filter: (_f, _t, d) => d.spec.hid !== e.value });
+			} else if (e.is(showFeedbackEffect)) {
+				const { pos, feedback } = e.value;
+				const line = tr.state.doc.lineAt(pos);
+				decos = decos.update({
+					filter: (_f, _t, d) => d.spec.group !== "feedback",
+					add: [Decoration.widget({ widget: new FeedbackWidget(feedback), block: true, side: 1, group: "feedback" }).range(line.to)],
+					sort: true,
+				});
 			} else if (e.is(clearGap)) {
 				decos = decos.update({ filter: (_f, _t, d) => !(d.spec.group === "gap" && d.spec.hid === e.value) });
 			} else if (e.is(setGap)) {
@@ -138,6 +193,31 @@ export function markPending(view: EditorView, from: number, to: number) {
 
 export function clearPending(view: EditorView) {
 	view.dispatch({ effects: clearGroup.of("pending") });
+}
+
+/** Puts the feedback card under the line containing `pos`; auto-hides after `ms` unless 0. */
+export function showFeedback(view: EditorView, pos: number, feedback: Feedback, ms: number) {
+	view.dispatch({ effects: showFeedbackEffect.of({ pos, feedback }) });
+	if (ms > 0) {
+		window.setTimeout(() => {
+			// Only hide our own card; a newer one has replaced it if the widget differs.
+			const still = view.state.field(decoField).iter();
+			for (; still.value; still.next()) {
+				if (still.value.spec.group === "feedback" && (still.value.spec.widget as FeedbackWidget).feedback === feedback) {
+					hideFeedback(view);
+					break;
+				}
+			}
+		}, ms);
+	}
+}
+
+export function hideFeedback(view: EditorView) {
+	try {
+		view.dispatch({ effects: clearGroup.of("feedback") });
+	} catch {
+		// Editor closed.
+	}
 }
 
 /** "Checked, nothing to change": a brief light-blue flash over the passage. */
