@@ -71,16 +71,17 @@ export default class NoteProofreaderPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!editor.somethingSelected()) return;
+				const name = this.manifest.name;
 				menu.addItem((item) => {
-					item.setTitle("Note Proofreader").setIcon("spell-check").setSection("selection");
+					item.setTitle(name).setIcon("spell-check").setSection("selection");
 					// setSubmenu exists at runtime but isn't in the public typings; fall back to flat items.
 					const sub = (item as MenuItem & { setSubmenu?: () => Menu }).setSubmenu?.();
 					const target = sub ?? menu;
-					if (!sub) item.setTitle("Note Proofreader：审阅修改").onClick(() => void this.askAndRun(editor, ctx));
+					if (!sub) item.setTitle(`${name}：审阅修改`).onClick(() => void this.askAndRun(editor, ctx));
 					else target.addItem((i) => i.setTitle("审阅修改").setIcon("spell-check").onClick(() => void this.askAndRun(editor, ctx)));
 					target.addItem((i) =>
 						i
-							.setTitle(sub ? "取消高亮" : "Note Proofreader：取消高亮")
+							.setTitle(sub ? "取消高亮" : `${name}：取消高亮`)
 							.setIcon("eraser")
 							.setSection("selection")
 							.onClick(() => this.removeHighlights(editor)),
@@ -122,7 +123,8 @@ export default class NoteProofreaderPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const saved = (await this.loadData()) as Partial<ProofreaderSettings> | null;
+		this.settings = { ...DEFAULT_SETTINGS, ...saved };
 	}
 
 	async saveSettings() {
@@ -158,11 +160,11 @@ export default class NoteProofreaderPlugin extends Plugin {
 		const secretId = this.settings.apiKeySecret;
 		const apiKey = secretId ? this.app.secretStorage.getSecret(secretId) : null;
 		if (!apiKey) {
-			new Notice("请先在「Note Proofreader」设置中配置 API Key。");
+			new Notice(`请先在「${this.manifest.name}」设置中配置 API key。`);
 			return;
 		}
 		if (this.settings.provider === "openai" && (!this.settings.openaiBaseURL || !this.settings.openaiModel)) {
-			new Notice("请先在「Note Proofreader」设置中填写接口地址和模型 ID。");
+			new Notice(`请先在「${this.manifest.name}」设置中填写接口地址和模型 ID。`);
 			return;
 		}
 

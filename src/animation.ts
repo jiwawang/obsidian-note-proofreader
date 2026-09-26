@@ -1,10 +1,10 @@
 import { EditorState, Extension, StateEffect, StateField, Transaction } from "@codemirror/state";
-import { Decoration, DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import { Decoration, DecorationSet, EditorView, layer, LayerMarker, WidgetType } from "@codemirror/view";
 import type { Hunk } from "./diff";
 import type { AnimationParams } from "./params";
 import { Glyph, measureGlyphs, ParticleLayer, textWidth } from "./particles";
 
-type Group = "pending" | "hidden" | "changed" | "flash" | "gap" | "feedback";
+type Group = "pending" | "hidden" | "changed" | "flash" | "gap";
 
 interface DecoSpec {
 	from: number;
@@ -16,6 +16,13 @@ interface DecoSpec {
 	style?: string;
 }
 
+/** What we stash in a decoration's spec (CodeMirror types it as `any`). */
+interface DecoMeta {
+	group?: Group;
+	hid?: number;
+}
+const metaOf = (d: Decoration) => d.spec as DecoMeta;
+
 const addDecos = StateEffect.define<DecoSpec[]>();
 const clearGroup = StateEffect.define<Group>();
 const unhide = StateEffect.define<number>();
@@ -23,53 +30,6 @@ const setLock = StateEffect.define<boolean>();
 /** Replace [from, to) of hunk `hid` with an empty inline box `width` px wide (animates via CSS). */
 const setGap = StateEffect.define<{ hid: number; from: number; to: number; width: number; shiftMs: number }>();
 const clearGap = StateEffect.define<number>();
-
-export interface Feedback {
-	kind: "ok" | "fixed";
-	title: string;
-	body: string;
-}
-/** Show a feedback card on its own line right after `pos`'s line. */
-const showFeedbackEffect = StateEffect.define<{ pos: number; feedback: Feedback }>();
-
-class FeedbackWidget extends WidgetType {
-	constructor(readonly feedback: Feedback) {
-		super();
-	}
-	eq(other: FeedbackWidget) {
-		return other.feedback === this.feedback;
-	}
-	toDOM(view: EditorView) {
-		const { kind, title, body } = this.feedback;
-		// A zero-height anchor so the card floats over the lines below instead of pushing them down.
-		const anchor = document.createElement("div");
-		anchor.className = "np-feedback-anchor";
-		const card = anchor.appendChild(document.createElement("div"));
-		card.className = `np-feedback np-feedback-${kind}`;
-		const head = card.appendChild(document.createElement("div"));
-		head.className = "np-feedback-title";
-		head.textContent = title;
-		if (body) {
-			const p = card.appendChild(document.createElement("div"));
-			p.className = "np-feedback-body";
-			p.textContent = body;
-		}
-		const close = card.appendChild(document.createElement("button"));
-		close.type = "button";
-		close.className = "np-feedback-close";
-		close.setAttribute("aria-label", "关闭");
-		close.textContent = "×";
-		close.addEventListener("mousedown", (e) => e.preventDefault());
-		close.addEventListener("click", (e) => {
-			e.preventDefault();
-			hideFeedback(view);
-		});
-		return anchor;
-	}
-	ignoreEvent() {
-		return true;
-	}
-}
 
 class GapWidget extends WidgetType {
 	constructor(
@@ -82,8 +42,7 @@ class GapWidget extends WidgetType {
 		return other.width === this.width;
 	}
 	toDOM() {
-		const el = document.createElement("span");
-		el.className = "np-gap";
+		const el = createSpan({ cls: "np-gap" });
 		el.style.setProperty("--np-shift", `${this.shiftMs}ms`);
 		el.style.width = `${this.width}px`;
 		return el;
@@ -104,19 +63,11 @@ const decoField = StateField.define<DecorationSet>({
 		decos = decos.map(tr.changes);
 		for (const e of tr.effects) {
 			if (e.is(clearGroup)) {
-				decos = decos.update({ filter: (_f, _t, d) => d.spec.group !== e.value });
+				decos = decos.update({ filter: (_f, _t, d) => metaOf(d).group !== e.value });
 			} else if (e.is(unhide)) {
-				decos = decos.update({ filter: (_f, _t, d) => d.spec.hid !== e.value });
-			} else if (e.is(showFeedbackEffect)) {
-				const { pos, feedback } = e.value;
-				const line = tr.state.doc.lineAt(pos);
-				decos = decos.update({
-					filter: (_f, _t, d) => d.spec.group !== "feedback",
-					add: [Decoration.widget({ widget: new FeedbackWidget(feedback), block: true, side: 1, group: "feedback" }).range(line.to)],
-					sort: true,
-				});
+				decos = decos.update({ filter: (_f, _t, d) => metaOf(d).hid !== e.value });
 			} else if (e.is(clearGap)) {
-				decos = decos.update({ filter: (_f, _t, d) => !(d.spec.group === "gap" && d.spec.hid === e.value) });
+				decos = decos.update({ filter: (_f, _t, d) => !(metaOf(d).group === "gap" && metaOf(d).hid === e.value) });
 			} else if (e.is(setGap)) {
 				const { hid, from, to, width, shiftMs } = e.value;
 				const widget = new GapWidget(width, shiftMs);
@@ -124,7 +75,11 @@ const decoField = StateField.define<DecorationSet>({
 					to > from
 						? Decoration.replace({ widget, group: "gap", hid }).range(from, to)
 						: Decoration.widget({ widget, side: 1, group: "gap", hid }).range(from);
-				decos = decos.update({ filter: (_f, _t, d) => !(d.spec.group === "gap" && d.spec.hid === hid), add: [deco], sort: true });
+				decos = decos.update({
+					filter: (_f, _t, d) => !(metaOf(d).group === "gap" && metaOf(d).hid === hid),
+					add: [deco],
+					sort: true,
+				});
 			} else if (e.is(addDecos)) {
 				const ranges = e.value
 					.filter((s) => s.to > s.from)
@@ -138,7 +93,120 @@ const decoField = StateField.define<DecorationSet>({
 		}
 		return decos;
 	},
-	provide: (f) => EditorView.decorations.from(f),
+	// Outer decorations wrap every regular decoration, so hiding one of our marks
+	// (opacity: 0) also hides syntax spans nested inside, like ==highlight== backgrounds.
+	provide: (f) => EditorView.outerDecorations.from(f),
+});
+
+// ---------- Feedback card ----------
+// Drawn on a CodeMirror layer (a sibling of the content, inside the scroller)
+// rather than as a widget in the text, so it floats over the following lines
+// without being clipped by Obsidian's `contain: paint` on block widgets.
+
+export interface Feedback {
+	kind: "ok" | "fixed";
+	title: string;
+	body: string;
+}
+
+interface FeedbackState {
+	/** Document position the card hangs under (end of the reviewed passage). */
+	pos: number;
+	feedback: Feedback;
+}
+
+const setFeedback = StateEffect.define<FeedbackState | null>();
+
+const feedbackField = StateField.define<FeedbackState | null>({
+	create: () => null,
+	update(value, tr) {
+		for (const e of tr.effects) if (e.is(setFeedback)) return e.value;
+		if (value && tr.docChanged) return { pos: tr.changes.mapPos(value.pos, -1), feedback: value.feedback };
+		return value;
+	},
+});
+
+class FeedbackMarker implements LayerMarker {
+	constructor(
+		readonly left: number,
+		readonly top: number,
+		readonly width: number,
+		readonly feedback: Feedback,
+		readonly view: EditorView,
+	) {}
+
+	eq(other: LayerMarker): boolean {
+		return (
+			other instanceof FeedbackMarker &&
+			other.feedback === this.feedback &&
+			other.left === this.left &&
+			other.top === this.top &&
+			other.width === this.width
+		);
+	}
+
+	draw(): HTMLElement {
+		const { kind, title, body } = this.feedback;
+		const card = createDiv({ cls: ["np-feedback", `np-feedback-${kind}`] });
+		card.createDiv({ cls: "np-feedback-title", text: title });
+		if (body) card.createDiv({ cls: "np-feedback-body", text: body });
+		const close = card.createEl("button", { cls: "np-feedback-close", text: "×", attr: { type: "button", "aria-label": "关闭" } });
+		// The scroller turns mousedown into cursor moves; keep clicks and text selection inside the card.
+		card.addEventListener("mousedown", (e) => e.stopPropagation());
+		close.addEventListener("mousedown", (e) => e.preventDefault());
+		close.addEventListener("click", (e) => {
+			e.preventDefault();
+			hideFeedback(this.view);
+		});
+		this.place(card);
+		return card;
+	}
+
+	// Same card, new position: move it rather than redraw (keeps text selection and the entrance animation).
+	update(dom: HTMLElement, prev: LayerMarker): boolean {
+		if (!(prev instanceof FeedbackMarker) || prev.feedback !== this.feedback) return false;
+		this.place(dom);
+		return true;
+	}
+
+	private place(dom: HTMLElement) {
+		dom.style.left = `${this.left}px`;
+		dom.style.top = `${this.top}px`;
+		dom.style.width = `${this.width}px`;
+	}
+}
+
+const feedbackLayer = layer({
+	above: true,
+	class: "np-feedback-layer",
+	update: (u) =>
+		u.docChanged ||
+		u.geometryChanged ||
+		u.viewportChanged ||
+		u.startState.field(feedbackField) !== u.state.field(feedbackField),
+	markers(view) {
+		const state = view.state.field(feedbackField);
+		if (!state) return [];
+		const end = view.coordsAtPos(state.pos, -1);
+		if (!end) return [];
+		// Layer coordinates are relative to the scrolled document origin, as for CodeMirror's own markers.
+		const scroller = view.scrollDOM.getBoundingClientRect();
+		const originLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+		const originTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
+		const content = view.contentDOM.getBoundingClientRect();
+		const cs = getComputedStyle(view.contentDOM);
+		const padLeft = parseFloat(cs.paddingLeft) || 0;
+		const padRight = parseFloat(cs.paddingRight) || 0;
+		return [
+			new FeedbackMarker(
+				content.left + padLeft - originLeft,
+				end.bottom - originTop + 8,
+				content.width - padLeft - padRight,
+				state.feedback,
+				view,
+			),
+		];
+	},
 });
 
 const lockField = StateField.define<boolean>({
@@ -173,7 +241,7 @@ const skipOnEscape = EditorView.domEventHandlers({
 	},
 });
 
-export const proofreaderExtension: Extension = [decoField, lockField, lockFilter, skipOnEscape];
+export const proofreaderExtension: Extension = [decoField, feedbackField, feedbackLayer, lockField, lockFilter, skipOnEscape];
 
 export function isAnimating(view: EditorView): boolean {
 	return controllers.has(view);
@@ -195,26 +263,20 @@ export function clearPending(view: EditorView) {
 	view.dispatch({ effects: clearGroup.of("pending") });
 }
 
-/** Puts the feedback card under the line containing `pos`; auto-hides after `ms` unless 0. */
+/** Shows the feedback card under the line containing `pos`; auto-hides after `ms` unless 0. */
 export function showFeedback(view: EditorView, pos: number, feedback: Feedback, ms: number) {
-	view.dispatch({ effects: showFeedbackEffect.of({ pos, feedback }) });
+	view.dispatch({ effects: setFeedback.of({ pos, feedback }) });
 	if (ms > 0) {
 		window.setTimeout(() => {
-			// Only hide our own card; a newer one has replaced it if the widget differs.
-			const still = view.state.field(decoField).iter();
-			for (; still.value; still.next()) {
-				if (still.value.spec.group === "feedback" && (still.value.spec.widget as FeedbackWidget).feedback === feedback) {
-					hideFeedback(view);
-					break;
-				}
-			}
+			// Only hide our own card; a newer review may have replaced it.
+			if (view.state.field(feedbackField, false)?.feedback === feedback) hideFeedback(view);
 		}, ms);
 	}
 }
 
 export function hideFeedback(view: EditorView) {
 	try {
-		view.dispatch({ effects: clearGroup.of("feedback") });
+		view.dispatch({ effects: setFeedback.of(null) });
 	} catch {
 		// Editor closed.
 	}
@@ -276,7 +338,7 @@ export async function animateRevision(
 	const noHistory = Transaction.addToHistory.of(false);
 	// Length of the region being rewritten as swaps land, so the end is always known.
 	let regionLen = original.length;
-	const layer = ctl.skip ? null : new ParticleLayer(params);
+	const particles = ctl.skip ? null : new ParticleLayer(params);
 
 	// Each phase (dissolve, gather) lasts L; the gather starts overlap*L into the dissolve.
 	const phase = params.durationMs / (2 - params.overlap);
@@ -302,14 +364,14 @@ export async function animateRevision(
 
 	const runHunk = async ({ id, hunk, at }: (typeof changes)[number]) => {
 		await sleep(id * params.staggerMs, ctl);
-		if (ctl.skip || !layer) return;
+		if (ctl.skip || !particles) return;
 		let oldWidth = 0;
 		let font = "";
 		if (hunk.del) {
 			const s = from + at + shift;
 			const glyphs = measureGlyphs(view, s, s + hunk.del.length);
 			view.dispatch({ effects: addDecos.of([{ from: s, to: s + hunk.del.length, group: "hidden", cls: "np-hidden", hid: id }]) });
-			layer.dissolve(glyphs, phase);
+			particles.dissolve(glyphs, phase);
 			font = glyphs[0]?.font ?? "";
 			oldWidth = spanWidth(glyphs) ?? textWidth(hunk.del, font);
 		}
@@ -352,7 +414,7 @@ export async function animateRevision(
 		}
 
 		if (hunk.ins) {
-			layer.gather(newGlyphs, phase);
+			particles.gather(newGlyphs, phase);
 			// Reveal the text while the particles are still (nearly) in place, then let them fade.
 			const handoff = Math.min(0.9, Math.max(0, params.handoff));
 			await sleep(phase * (1 - handoff), ctl);
@@ -368,7 +430,7 @@ export async function animateRevision(
 		await Promise.all(changes.map(runHunk));
 	} finally {
 		controllers.delete(view);
-		layer?.destroy();
+		particles?.destroy();
 		// Rewind the animated region to the original (outside history), then apply
 		// the real edit once, so Ctrl+Z restores the passage in one step. Both
 		// dispatches happen before the next paint, so nothing flickers. This also
@@ -405,7 +467,7 @@ export async function animateRevision(
 				}, params.holdMs + 100);
 			}
 		} catch (e) {
-			console.error("[note-proofreader] failed to finalize revision", e);
+			console.error("[veritas-howler] failed to finalize revision", e);
 		}
 	}
 }

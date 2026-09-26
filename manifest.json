@@ -1,9 +1,9 @@
 {
   "id": "note-proofreader",
-  "name": "Note Proofreader",
-  "version": "0.2.3",
-  "minAppVersion": "1.11.4",
-  "description": "Fact-check a selected passage with an LLM (DeepSeek, Gemini, Claude...) and write corrections back in place with a particle animation. Keeps your own wording.",
+  "name": "Veritas Howler",
+  "version": "0.3.0",
+  "minAppVersion": "1.13.0",
+  "description": "Fact-check a passage with an LLM (DeepSeek, Gemini, Claude...), keep your own wording, and get corrections written back in place with a particle animation plus a short teacher-style note.",
   "author": "Jingwen Wang",
   "isDesktopOnly": false,
   "authorUrl": "https://github.com/jiwawang"

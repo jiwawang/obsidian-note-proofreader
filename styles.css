@@ -23,16 +23,10 @@
 }
 
 /* Text that the particle canvas is drawing on our behalf. Keeps its layout.
-   The :has() clause also blanks a highlight span wrapped around it, so ==marks==
-   don't show their background before their text has formed. */
-.np-hidden,
-.np-hidden *,
-span:has(> .np-hidden) {
-	color: transparent !important;
-	-webkit-text-fill-color: transparent !important;
-	text-shadow: none !important;
-	text-decoration-color: transparent !important;
-	background-color: transparent !important;
+   Our marks are outer decorations (they wrap all other spans), so this also hides
+   nested syntax spans such as ==highlight== backgrounds. */
+.np-hidden {
+	opacity: 0;
 }
 
 /* After the rewrite: changed spots sit on light blue that fades away... */
@@ -109,24 +103,13 @@ span:has(> .np-hidden) {
 
 /* ---------- Feedback card: frosted glass floating under the passage ---------- */
 
-.np-feedback-anchor {
-	position: relative;
-	height: 0;
-	overflow: visible;
-	z-index: 20;
-}
-
-/* Obsidian puts `contain: paint !important` on every block widget, which would
-   clip the card (it hangs below the zero-height anchor). Out-specify that rule. */
-.markdown-source-view.mod-cm6 .cm-content > .np-feedback-anchor.np-feedback-anchor {
-	contain: none !important;
+/* A CodeMirror layer above the text; the card inside is absolutely positioned by the layer. */
+.np-feedback-layer {
+	z-index: 150;
 }
 
 .np-feedback {
-	position: absolute;
-	top: 8px;
-	left: 0;
-	right: 0;
+	box-sizing: border-box;
 	padding: 12px 44px 12px 16px;
 	border-radius: 14px;
 	color: var(--text-normal);

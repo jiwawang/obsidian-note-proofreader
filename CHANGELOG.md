@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- 插件显示名改为 **Veritas Howler**（插件 ID 仍是 `note-proofreader`，已安装的不受影响）。
+- 需要 Obsidian 1.13.0 及以上：设置页改用新的声明式设置 API，设置项现在能在 Obsidian 的设置搜索里搜到。
+- 反馈卡片改为画在编辑器的独立图层上，不再依赖覆盖 Obsidian 样式的 `!important`，也不会被正文裁剪。
+- 颗粒动画期间隐藏文字的方式改为整段透明，修复了深色主题下聚合颗粒颜色偏黑的问题。
+- 按 Obsidian 插件审核意见清理：改用 Obsidian 的 `createEl` 等 DOM 工具和 `window.requestAnimationFrame`，声明 CodeMirror 依赖，去掉 `builtin-modules`，补齐类型；发布时附带 GitHub 构建证明（artifact attestation）；README 改为英文为主。
+
 ## 0.2.3
 
 - 修复：反馈卡片在 Obsidian 里不显示。Obsidian 对所有块级挂件加了 `contain: paint`，把悬浮在锚点下方的卡片整个裁掉了；现已对卡片锚点关闭该属性。

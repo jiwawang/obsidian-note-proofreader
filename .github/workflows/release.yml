@@ -1,6 +1,6 @@
-# Pushing a tag that matches manifest.json's version (e.g. `0.1.1`, no "v")
-# builds the plugin and publishes a GitHub release with the three files
-# Obsidian (and BRAT) install from.
+# Pushing a tag that matches manifest.json's version (e.g. `0.3.0`, no "v")
+# builds the plugin, attests the build provenance, and publishes a GitHub
+# release with the three files Obsidian (and BRAT) install from.
 name: Release
 
 on:
@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -32,6 +34,13 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} does not match manifest version ${version}" >&2
             exit 1
           fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Publish release
         env:

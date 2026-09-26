@@ -73,7 +73,7 @@ function elementAt(view: EditorView, pos: number): Element | null {
 	return node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
 }
 
-const scratch = document.createElement("canvas");
+const scratch = createEl("canvas");
 
 /** Width `text` takes in `font`, as the browser would lay it out on one line. */
 export function textWidth(text: string, font: string): number {
@@ -175,7 +175,7 @@ const easeIn = (t: number) => t * t * t;
 
 /** A full-window canvas that draws every in-flight particle burst. */
 export class ParticleLayer {
-	private canvas = document.createElement("canvas");
+	private canvas = createEl("canvas");
 	private ctx: CanvasRenderingContext2D;
 	private bursts: Burst[] = [];
 	private raf = 0;
@@ -212,7 +212,7 @@ export class ParticleLayer {
 		const n = Math.max(1, glyphs.length - 1);
 		const particles = glyphs.flatMap((g, i) => sample(g, this.params, this.rnd, this.params.sweep * (1 - this.params.jitter) * (i / n)));
 		this.bursts.push({ particles, start: performance.now(), duration, kind, size: this.params.particleSize });
-		if (!this.raf) this.raf = requestAnimationFrame(this.frame);
+		if (!this.raf) this.raf = window.requestAnimationFrame(this.frame);
 	}
 
 	private frame = (now: number) => {
@@ -252,7 +252,7 @@ export class ParticleLayer {
 				ctx.fillRect(x, y, b.size, b.size);
 			}
 		}
-		this.raf = this.bursts.length ? requestAnimationFrame(this.frame) : 0;
+		this.raf = this.bursts.length ? window.requestAnimationFrame(this.frame) : 0;
 	};
 
 	get busy() {
@@ -260,7 +260,7 @@ export class ParticleLayer {
 	}
 
 	destroy() {
-		if (this.raf) cancelAnimationFrame(this.raf);
+		if (this.raf) window.cancelAnimationFrame(this.raf);
 		this.raf = 0;
 		this.bursts = [];
 		this.canvas.remove();

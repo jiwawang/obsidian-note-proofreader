@@ -106,7 +106,7 @@ function describeHttpError(status: number, text: string): string {
 		detail = text.slice(0, 200);
 	}
 	const suffix = detail ? `：${detail}` : "";
-	if (status === 401 || status === 403) return `API Key 无效或没有权限${suffix}`;
+	if (status === 401 || status === 403) return `API key 无效或没有权限${suffix}`;
 	if (status === 402) return `账户余额不足${suffix}`;
 	if (status === 404) return `找不到接口或模型，请检查接口地址和模型 ID${suffix}`;
 	if (status === 429) return `请求过于频繁或超出额度，请稍后再试${suffix}`;

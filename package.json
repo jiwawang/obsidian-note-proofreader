@@ -1,7 +1,7 @@
 {
   "name": "note-proofreader",
-  "version": "0.2.3",
-  "description": "Obsidian plugin: fact-check and polish note passages with an animated rewrite",
+  "version": "0.3.0",
+  "description": "Veritas Howler: an Obsidian plugin that fact-checks a passage with an LLM and writes corrections back with a particle animation",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -10,11 +10,12 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.38.6",
     "diff": "^9.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
-    "builtin-modules": "^5.4.0",
     "esbuild": "^0.28.2",
     "obsidian": "^1.13.1",
     "typescript": "^7.0.2"

@@ -169,19 +169,19 @@ export function normalizeResult(obj: unknown, original: string): ReviewResult | 
 
 function describeApiError(e: unknown): string {
 	if (e instanceof Anthropic.APIUserAbortError) return "已取消。";
-	if (e instanceof Anthropic.AuthenticationError) return "API Key 无效，请在插件设置中检查。";
-	if (e instanceof Anthropic.PermissionDeniedError) return "该 API Key 没有权限使用所选模型。";
+	if (e instanceof Anthropic.AuthenticationError) return "API key 无效，请在插件设置中检查。";
+	if (e instanceof Anthropic.PermissionDeniedError) return "该 API key 没有权限使用所选模型。";
 	if (e instanceof Anthropic.NotFoundError) return "找不到所选模型，请检查设置中的模型名称。";
 	if (e instanceof Anthropic.RateLimitError) return "请求过于频繁或额度不足，请稍后再试。";
-	if (e instanceof Anthropic.BadRequestError) return `请求被拒绝：${apiMessage(e)}`;
+	if (e instanceof Anthropic.BadRequestError) return `请求被拒绝：${apiMessage(e.error, e.message)}`;
 	if (e instanceof Anthropic.InternalServerError) return "Claude 服务暂时不可用，请稍后再试。";
 	if (e instanceof Anthropic.APIConnectionError) return "无法连接到 Claude API，请检查网络或自定义 API 地址。";
-	if (e instanceof Anthropic.APIError) return `API 错误：${apiMessage(e)}`;
+	if (e instanceof Anthropic.APIError) return `API 错误：${apiMessage(e.error, e.message)}`;
 	return e instanceof Error ? e.message : String(e);
 }
 
 /** The human-readable message from an API error body, rather than the raw JSON. */
-function apiMessage(e: InstanceType<typeof Anthropic.APIError>): string {
-	const body = e.error as { error?: { message?: string } } | undefined;
-	return body?.error?.message ?? e.message;
+function apiMessage(error: unknown, fallback: string): string {
+	const body = error as { error?: { message?: string } } | undefined;
+	return body?.error?.message ?? fallback;
 }

@@ -1,4 +1,5 @@
-import { App, PluginSettingTab, SecretComponent, Setting } from "obsidian";
+import { App, PluginSettingTab, SecretComponent } from "obsidian";
+import type { SettingDefinitionItem } from "obsidian";
 import type NoteProofreaderPlugin from "./main";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -78,6 +79,11 @@ const MODEL_OPTIONS: Record<string, string> = {
 	custom: "自定义…",
 };
 
+/** Which preset the current OpenAI-compatible base URL matches, or "custom". */
+function presetOf(s: ProofreaderSettings): string {
+	return Object.entries(OPENAI_PRESETS).find(([id, p]) => id !== "custom" && p.baseURL === s.openaiBaseURL)?.[0] ?? "custom";
+}
+
 export class ProofreaderSettingTab extends PluginSettingTab {
 	private editingCustomModel = false;
 
@@ -88,236 +94,180 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	display(): void {
-		const { containerEl } = this;
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		const s = this.plugin.settings;
-		const save = () => this.plugin.saveSettings();
-		containerEl.empty();
+		const openai = () => s.provider === "openai";
+		const anthropic = () => s.provider === "anthropic";
+		const customModel = () => anthropic() && (this.editingCustomModel || !(s.model in MODEL_OPTIONS));
 
-		new Setting(containerEl).setName("模型服务").setHeading();
-
-		new Setting(containerEl)
-			.setName("服务商")
-			.addDropdown((d) =>
-				d
-					.addOptions({ openai: "OpenAI 兼容接口（DeepSeek / Gemini / OpenRouter…）", anthropic: "Anthropic Claude" })
-					.setValue(s.provider)
-					.onChange(async (v) => {
-						s.provider = v as Provider;
-						await save();
-						this.display();
-					}),
-			);
-
-		const keyDesc =
-			s.provider === "anthropic"
-				? "保存在 Obsidian 的密钥库中，不会写进仓库文件。在 console.anthropic.com 创建。"
-				: "所选服务商的 API Key，保存在 Obsidian 的密钥库中，不会写进仓库文件。";
-		new Setting(containerEl)
-			.setName("API Key")
-			.setDesc(keyDesc)
-			.addComponent((el) =>
-				new SecretComponent(this.app, el).setValue(s.apiKeySecret).onChange(async (v) => {
-					s.apiKeySecret = v;
-					await save();
-				}),
-			);
-
-		if (s.provider === "openai") this.displayOpenAI(containerEl);
-		else this.displayAnthropic(containerEl);
-
-		new Setting(containerEl)
-			.setName("参考上下文长度")
-			.setDesc("随选区一起发送、供 Claude 理解前后文的笔记字符数。笔记更短时发送全文。")
-			.addText((t) =>
-				t.setValue(String(s.contextChars)).onChange(async (v) => {
-					const n = Number.parseInt(v, 10);
-					if (Number.isFinite(n) && n >= 0) {
-						s.contextChars = n;
-						await save();
-					}
-				}),
-			);
-
-		new Setting(containerEl).setName("触发与动画").setHeading();
-
-		new Setting(containerEl)
-			.setName("双击 Alt / Option (⌥) 审阅选中文字")
-			.setDesc("连续按两次 Alt（Mac 上是 Option ⌥，中间不按其他键）直接修正选区内的事实性错误。也可以在「快捷键」里给「审阅修改」命令另外绑键。")
-			.addToggle((t) =>
-				t.setValue(s.doubleAlt).onChange(async (v) => {
-					s.doubleAlt = v;
-					await save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("双击间隔（毫秒）")
-			.addSlider((sl) =>
-				sl
-					.setLimits(150, 600, 25)
-					.setValue(s.doubleAltMs)
-					.setDynamicTooltip()
-					.onChange(async (v) => {
-						s.doubleAltMs = v;
-						await save();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("反馈提示停留时间")
-			.setDesc("审阅结束后右上角的说明（“你的思路没有问题…”或“为什么改…”）显示多少秒；0 = 一直显示，点击关闭。")
-			.addSlider((sl) =>
-				sl
-					.setLimits(0, 60, 5)
-					.setValue(s.feedbackSeconds)
-					.setDynamicTooltip()
-					.onChange(async (v) => {
-						s.feedbackSeconds = v;
-						await save();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("高亮显示为浅蓝")
-			.setDesc("改动处会以 ==高亮== 语法写入笔记。开启后笔记里所有高亮都显示为浅蓝色，而不是主题默认的黄色。")
-			.addToggle((t) =>
-				t.setValue(s.blueHighlight).onChange(async (v) => {
-					s.blueHighlight = v;
-					await save();
-					this.plugin.applyHighlightColor();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("颗粒动画")
-			.setDesc("改动的词句散成颗粒再重新聚成新文字。动画中按 Esc 可跳过；系统开启“减少动态效果”时自动关闭。")
-			.addToggle((t) =>
-				t.setValue(s.animate).onChange(async (v) => {
-					s.animate = v;
-					await save();
-				}),
-			);
+		return [
+			{
+				type: "group",
+				heading: "模型服务",
+				items: [
+					{
+						name: "服务商",
+						control: {
+							type: "dropdown",
+							key: "provider",
+							options: { openai: "OpenAI 兼容接口（DeepSeek / Gemini / OpenRouter…）", anthropic: "Anthropic Claude" },
+						},
+					},
+					{
+						name: "API key",
+						desc:
+							s.provider === "anthropic"
+								? "保存在 Obsidian 的密钥库中，不会写进仓库文件。在 console.anthropic.com 创建。"
+								: "所选服务商的 API key，保存在 Obsidian 的密钥库中，不会写进仓库文件。",
+						render: (setting) => {
+							setting.addComponent((el) =>
+								new SecretComponent(this.app, el).setValue(s.apiKeySecret).onChange(async (v) => {
+									s.apiKeySecret = v;
+									await this.plugin.saveSettings();
+								}),
+							);
+						},
+					},
+					{
+						name: "预设",
+						desc: OPENAI_PRESETS[presetOf(s)].hint,
+						visible: openai,
+						control: {
+							type: "dropdown",
+							key: "preset",
+							options: Object.fromEntries(Object.entries(OPENAI_PRESETS).map(([id, p]) => [id, p.name])),
+						},
+					},
+					{
+						name: "接口地址",
+						desc: "OpenAI 兼容的 base URL，插件会在后面加上 /chat/completions。",
+						visible: openai,
+						control: { type: "text", key: "openaiBaseURL", placeholder: "https://api.example.com/v1" },
+					},
+					{
+						name: "模型 ID",
+						visible: openai,
+						control: { type: "text", key: "openaiModel", placeholder: "deepseek-flash" },
+					},
+					{
+						name: "模型",
+						visible: anthropic,
+						control: { type: "dropdown", key: "modelChoice", options: MODEL_OPTIONS },
+					},
+					{
+						name: "自定义模型 ID",
+						visible: customModel,
+						control: { type: "text", key: "model", placeholder: "claude-opus-5" },
+					},
+					{
+						name: "思考强度 (effort)",
+						desc: "越高查验越仔细，但更慢、更贵。Haiku 不支持此项。",
+						visible: anthropic,
+						control: {
+							type: "dropdown",
+							key: "effort",
+							options: { low: "low", medium: "medium", high: "high（默认）", xhigh: "xhigh", max: "max" },
+						},
+					},
+					{
+						name: "拒答时自动换用备用模型",
+						desc: "Opus 5 的安全分类器偶尔会误拒正常内容，开启后由服务端自动改用推荐的备用模型重试。使用自定义代理地址时若报错可关闭。",
+						visible: anthropic,
+						control: { type: "toggle", key: "useFallbacks" },
+					},
+					{
+						name: "自定义 API 地址",
+						desc: "留空使用官方地址 https://api.anthropic.com。",
+						visible: anthropic,
+						control: { type: "text", key: "baseURL", placeholder: "https://api.anthropic.com" },
+					},
+					{
+						name: "参考上下文长度",
+						desc: "随选区一起发送、供模型理解前后文的笔记字符数。笔记更短时发送全文。",
+						control: {
+							type: "number",
+							key: "contextChars",
+							min: 0,
+							step: 1000,
+							validate: (v) => (Number.isFinite(v) && v >= 0 ? undefined : "请输入不小于 0 的数字。"),
+						},
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "触发与动画",
+				items: [
+					{
+						name: "双击 Alt / Option (⌥) 审阅选中文字",
+						desc: "连续按两次 Alt（Mac 上是 Option ⌥，中间不按其他键）直接修正选区内的事实性错误。也可以在「快捷键」里给「审阅修改」命令另外绑键。",
+						control: { type: "toggle", key: "doubleAlt" },
+					},
+					{
+						name: "双击间隔（毫秒）",
+						control: { type: "slider", key: "doubleAltMs", min: 150, max: 600, step: 25 },
+					},
+					{
+						name: "反馈卡片停留时间",
+						desc: "审阅结束后，这段文字下方的反馈卡片显示多久；0 = 一直显示，点右上角 × 关闭。",
+						control: {
+							type: "slider",
+							key: "feedbackSeconds",
+							min: 0,
+							max: 60,
+							step: 5,
+							displayFormat: (v) => (v === 0 ? "一直显示" : `${v} 秒`),
+						},
+					},
+					{
+						name: "高亮显示为浅蓝",
+						desc: "改动处会以 ==高亮== 语法写入笔记。开启后笔记里所有高亮都显示为浅蓝色，而不是主题默认的黄色。",
+						control: { type: "toggle", key: "blueHighlight" },
+					},
+					{
+						name: "颗粒动画",
+						desc: "改动的文字散成颗粒再重新聚成新文字。动画中按 Esc 可跳过；系统开启“减少动态效果”时自动关闭。",
+						control: { type: "toggle", key: "animate" },
+					},
+				],
+			},
+		];
 	}
 
-	private displayOpenAI(containerEl: HTMLElement) {
+	getControlValue(key: string): unknown {
 		const s = this.plugin.settings;
-		const save = () => this.plugin.saveSettings();
-		const presetOf = () =>
-			Object.entries(OPENAI_PRESETS).find(([id, p]) => id !== "custom" && p.baseURL === s.openaiBaseURL)?.[0] ?? "custom";
-		const preset = presetOf();
-
-		new Setting(containerEl)
-			.setName("预设")
-			.setDesc(OPENAI_PRESETS[preset].hint)
-			.addDropdown((d) =>
-				d
-					.addOptions(Object.fromEntries(Object.entries(OPENAI_PRESETS).map(([id, p]) => [id, p.name])))
-					.setValue(preset)
-					.onChange(async (v) => {
-						if (v !== "custom") {
-							s.openaiBaseURL = OPENAI_PRESETS[v].baseURL;
-							s.openaiModel = OPENAI_PRESETS[v].model;
-						} else {
-							s.openaiBaseURL = "";
-						}
-						await save();
-						this.display();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("接口地址")
-			.setDesc("OpenAI 兼容的 base URL，插件会在后面加上 /chat/completions。")
-			.addText((t) =>
-				t
-					.setPlaceholder("https://api.example.com/v1")
-					.setValue(s.openaiBaseURL)
-					.onChange(async (v) => {
-						s.openaiBaseURL = v.trim().replace(/\/+$/, "");
-						await save();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("模型 ID")
-			.addText((t) =>
-				t
-					.setPlaceholder("deepseek-flash")
-					.setValue(s.openaiModel)
-					.onChange(async (v) => {
-						s.openaiModel = v.trim();
-						await save();
-					}),
-			);
+		if (key === "preset") return presetOf(s);
+		if (key === "modelChoice") return this.editingCustomModel || !(s.model in MODEL_OPTIONS) ? "custom" : s.model;
+		return (s as unknown as Record<string, unknown>)[key];
 	}
 
-	private displayAnthropic(containerEl: HTMLElement) {
+	async setControlValue(key: string, value: unknown): Promise<void> {
 		const s = this.plugin.settings;
-		const save = () => this.plugin.saveSettings();
-
-		const showCustom = this.editingCustomModel || !(s.model in MODEL_OPTIONS);
-		new Setting(containerEl)
-			.setName("模型")
-			.addDropdown((d) =>
-				d
-					.addOptions(MODEL_OPTIONS)
-					.setValue(showCustom ? "custom" : s.model)
-					.onChange(async (v) => {
-						this.editingCustomModel = v === "custom";
-						if (v !== "custom") s.model = v;
-						await save();
-						this.display();
-					}),
-			);
-		if (showCustom) {
-			new Setting(containerEl)
-				.setName("自定义模型 ID")
-				.addText((t) =>
-					t
-						.setPlaceholder("claude-opus-5")
-						.setValue(s.model in MODEL_OPTIONS ? "" : s.model)
-						.onChange(async (v) => {
-							s.model = v.trim() || DEFAULT_SETTINGS.model;
-							await save();
-						}),
-				);
+		// Some choices reveal or hide other rows, so the tab re-reads its definitions afterwards.
+		let rebuild = false;
+		if (key === "preset") {
+			const preset = OPENAI_PRESETS[String(value)];
+			if (preset && value !== "custom") {
+				s.openaiBaseURL = preset.baseURL;
+				s.openaiModel = preset.model;
+			} else {
+				s.openaiBaseURL = "";
+			}
+			rebuild = true;
+		} else if (key === "modelChoice") {
+			this.editingCustomModel = value === "custom";
+			if (value !== "custom") s.model = String(value);
+			rebuild = true;
+		} else {
+			let v = value;
+			if (typeof v === "string") v = v.trim();
+			if (key === "openaiBaseURL" && typeof v === "string") v = v.replace(/\/+$/, "");
+			if (key === "model" && !v) v = DEFAULT_SETTINGS.model;
+			(s as unknown as Record<string, unknown>)[key] = v;
+			rebuild = key === "provider";
 		}
-
-		new Setting(containerEl)
-			.setName("思考强度 (effort)")
-			.setDesc("越高查验越仔细，但更慢、更贵。Haiku 不支持此项。")
-			.addDropdown((d) =>
-				d
-					.addOptions({ low: "low", medium: "medium", high: "high（默认）", xhigh: "xhigh", max: "max" })
-					.setValue(s.effort)
-					.onChange(async (v) => {
-						s.effort = v as Effort;
-						await save();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("拒答时自动换用备用模型")
-			.setDesc("Opus 5 的安全分类器偶尔会误拒正常内容，开启后由服务端自动改用推荐的备用模型重试。使用自定义代理地址时若报错可关闭。")
-			.addToggle((t) =>
-				t.setValue(s.useFallbacks).onChange(async (v) => {
-					s.useFallbacks = v;
-					await save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("自定义 API 地址")
-			.setDesc("留空使用官方地址 https://api.anthropic.com。")
-			.addText((t) =>
-				t
-					.setPlaceholder("https://api.anthropic.com")
-					.setValue(s.baseURL)
-					.onChange(async (v) => {
-						s.baseURL = v.trim();
-						await save();
-					}),
-			);
+		await this.plugin.saveSettings();
+		if (key === "blueHighlight") this.plugin.applyHighlightColor();
+		if (rebuild) this.update();
 	}
 }
