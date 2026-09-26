@@ -116,6 +116,12 @@ span:has(> .np-hidden) {
 	z-index: 20;
 }
 
+/* Obsidian puts `contain: paint !important` on every block widget, which would
+   clip the card (it hangs below the zero-height anchor). Out-specify that rule. */
+.markdown-source-view.mod-cm6 .cm-content > .np-feedback-anchor.np-feedback-anchor {
+	contain: none !important;
+}
+
 .np-feedback {
 	position: absolute;
 	top: 8px;

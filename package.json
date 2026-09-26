@@ -1,6 +1,6 @@
 {
   "name": "note-proofreader",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Obsidian plugin: fact-check and polish note passages with an animated rewrite",
   "main": "main.js",
   "scripts": {
