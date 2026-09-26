@@ -1,4 +1,4 @@
-# Veritas Howler
+# Veritas Howler – Note Proofreader
 
 Select a passage in a note and let an LLM check it for **factual errors**. Your own wording is kept; only what is actually wrong gets fixed. The corrected passage dissolves into ink particles and re-forms in place, changed spots are marked with a light-blue `==highlight==`, and a short teacher-style note appears right under the passage: what you got right, or what was wrong and why.
 

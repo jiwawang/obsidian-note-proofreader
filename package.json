@@ -1,6 +1,6 @@
 {
   "name": "note-proofreader",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Veritas Howler: an Obsidian plugin that fact-checks a passage with an LLM and writes corrections back with a particle animation",
   "main": "main.js",
   "scripts": {

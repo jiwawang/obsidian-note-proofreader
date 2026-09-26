@@ -71,7 +71,8 @@ export default class NoteProofreaderPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!editor.somethingSelected()) return;
-				const name = this.manifest.name;
+				// The menu shows just the brand ("Veritas Howler"), not the full "– Note Proofreader" name.
+				const name = this.manifest.name.split(" – ")[0];
 				menu.addItem((item) => {
 					item.setTitle(name).setIcon("spell-check").setSection("selection");
 					// setSubmenu exists at runtime but isn't in the public typings; fall back to flat items.
