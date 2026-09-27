@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- 插件名改为 **Veritas Howler - Note Proofreader**（半角连字符）：插件目录不接受名字里的 en dash「–」。
+
 ## 0.3.1
 
 - 插件显示名改为 **Veritas Howler – Note Proofreader**；右键菜单里仍显示为 “Veritas Howler”。
