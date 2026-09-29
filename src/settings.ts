@@ -1,10 +1,14 @@
 import { App, PluginSettingTab, SecretComponent } from "obsidian";
 import type { SettingDefinitionItem } from "obsidian";
+import { t } from "./i18n";
 import type NoteProofreaderPlugin from "./main";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type Provider = "anthropic" | "openai";
+
+/** How ==highlights== (and the waiting shimmer) look. */
+export type HighlightColor = "gray" | "blue" | "theme";
 
 export interface ProofreaderSettings {
 	provider: Provider;
@@ -23,8 +27,7 @@ export interface ProofreaderSettings {
 	doubleAlt: boolean;
 	doubleAltMs: number;
 	animate: boolean;
-	/** Show ==highlights== in light blue instead of the theme's colour. */
-	blueHighlight: boolean;
+	highlightColor: HighlightColor;
 	/** How long the feedback note stays on screen, seconds; 0 = until clicked. */
 	feedbackSeconds: number;
 	/** Last "extra requirements" text, pre-filled next time. */
@@ -44,40 +47,41 @@ export const DEFAULT_SETTINGS: ProofreaderSettings = {
 	doubleAlt: true,
 	doubleAltMs: 300,
 	animate: true,
-	blueHighlight: true,
+	highlightColor: "gray",
 	feedbackSeconds: 20,
 	lastExtra: "",
 };
 
 /** Ready-made OpenAI-compatible endpoints. Base URL + a cheap default model. */
-export const OPENAI_PRESETS: Record<string, { name: string; baseURL: string; model: string; hint: string }> = {
+export const OPENAI_PRESETS: Record<string, { name: string; baseURL: string; model: string; hint: () => string }> = {
 	deepseek: {
 		name: "DeepSeek",
 		baseURL: "https://api.deepseek.com",
 		model: "deepseek-flash",
-		hint: "Key 在 platform.deepseek.com 创建。约 $0.15–0.30 / 百万输入 token；也可填 deepseek-v4-pro（更强，约 3 倍价）。",
+		hint: () => t().presetDeepseek,
 	},
 	gemini: {
 		name: "Google Gemini",
 		baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 		model: "gemini-2.5-flash-lite",
-		hint: "Key 在 aistudio.google.com 创建，Flash 系列有免费额度（免费档数据可能被用于训练）。更强可填 gemini-3.8-flash。",
+		hint: () => t().presetGemini,
 	},
 	openrouter: {
 		name: "OpenRouter",
 		baseURL: "https://openrouter.ai/api/v1",
 		model: "openrouter/free",
-		hint: "Key 在 openrouter.ai 创建。openrouter/free 随机路由到免费模型（质量不稳定）；也可填任意模型 ID，如 deepseek/deepseek-flash。",
+		hint: () => t().presetOpenRouter,
 	},
-	custom: { name: "自定义…", baseURL: "", model: "", hint: "任何 OpenAI 兼容接口：填 /v1 结尾的地址（不含 /chat/completions）和模型 ID。" },
+	custom: { name: "Custom…", baseURL: "", model: "", hint: () => t().presetCustom },
 };
 
-const MODEL_OPTIONS: Record<string, string> = {
-	"claude-opus-5": "Claude Opus 5（推荐）",
-	"claude-sonnet-5": "Claude Sonnet 5（更快、更便宜）",
-	"claude-haiku-4-5": "Claude Haiku 4.5（最快）",
-	custom: "自定义…",
-};
+/** Anthropic model choices (a function, so labels follow the language picked on load). */
+const modelOptions = (): Record<string, string> => ({
+	"claude-opus-5": t().opusRecommended,
+	"claude-sonnet-5": t().sonnet,
+	"claude-haiku-4-5": t().haiku,
+	custom: t().custom,
+});
 
 /** Which preset the current OpenAI-compatible base URL matches, or "custom". */
 function presetOf(s: ProofreaderSettings): string {
@@ -98,27 +102,27 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 		const s = this.plugin.settings;
 		const openai = () => s.provider === "openai";
 		const anthropic = () => s.provider === "anthropic";
-		const customModel = () => anthropic() && (this.editingCustomModel || !(s.model in MODEL_OPTIONS));
+		const customModel = () => anthropic() && (this.editingCustomModel || !(s.model in modelOptions()));
 
 		return [
 			{
 				type: "group",
-				heading: "模型服务",
+				heading: t().hModel,
 				items: [
 					{
-						name: "服务商",
+						name: t().provider,
 						control: {
 							type: "dropdown",
 							key: "provider",
-							options: { openai: "OpenAI 兼容接口（DeepSeek / Gemini / OpenRouter…）", anthropic: "Anthropic Claude" },
+							options: { openai: t().providerOpenAI, anthropic: "Anthropic Claude" },
 						},
 					},
 					{
 						name: "API key",
 						desc:
 							s.provider === "anthropic"
-								? "保存在 Obsidian 的密钥库中，不会写进仓库文件。在 console.anthropic.com 创建。"
-								: "所选服务商的 API key，保存在 Obsidian 的密钥库中，不会写进仓库文件。",
+								? t().keyDescAnthropic
+								: t().keyDescOpenAI,
 						render: (setting) => {
 							setting.addComponent((el) =>
 								new SecretComponent(this.app, el).setValue(s.apiKeySecret).onChange(async (v) => {
@@ -129,104 +133,104 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 						},
 					},
 					{
-						name: "预设",
-						desc: OPENAI_PRESETS[presetOf(s)].hint,
+						name: t().preset,
+						desc: OPENAI_PRESETS[presetOf(s)].hint(),
 						visible: openai,
 						control: {
 							type: "dropdown",
 							key: "preset",
-							options: Object.fromEntries(Object.entries(OPENAI_PRESETS).map(([id, p]) => [id, p.name])),
+							options: Object.fromEntries(Object.entries(OPENAI_PRESETS).map(([id, p]) => [id, id === "custom" ? t().custom : p.name])),
 						},
 					},
 					{
-						name: "接口地址",
-						desc: "OpenAI 兼容的 base URL，插件会在后面加上 /chat/completions。",
+						name: t().endpoint,
+						desc: t().endpointDesc,
 						visible: openai,
 						control: { type: "text", key: "openaiBaseURL", placeholder: "https://api.example.com/v1" },
 					},
 					{
-						name: "模型 ID",
+						name: t().modelId,
 						visible: openai,
 						control: { type: "text", key: "openaiModel", placeholder: "deepseek-flash" },
 					},
 					{
-						name: "模型",
+						name: t().model,
 						visible: anthropic,
-						control: { type: "dropdown", key: "modelChoice", options: MODEL_OPTIONS },
+						control: { type: "dropdown", key: "modelChoice", options: modelOptions() },
 					},
 					{
-						name: "自定义模型 ID",
+						name: t().customModelId,
 						visible: customModel,
 						control: { type: "text", key: "model", placeholder: "claude-opus-5" },
 					},
 					{
-						name: "思考强度 (effort)",
-						desc: "越高查验越仔细，但更慢、更贵。Haiku 不支持此项。",
+						name: t().effort,
+						desc: t().effortDesc,
 						visible: anthropic,
 						control: {
 							type: "dropdown",
 							key: "effort",
-							options: { low: "low", medium: "medium", high: "high（默认）", xhigh: "xhigh", max: "max" },
+							options: { low: "low", medium: "medium", high: t().effortDefault, xhigh: "xhigh", max: "max" },
 						},
 					},
 					{
-						name: "拒答时自动换用备用模型",
-						desc: "Opus 5 的安全分类器偶尔会误拒正常内容，开启后由服务端自动改用推荐的备用模型重试。使用自定义代理地址时若报错可关闭。",
+						name: t().fallbacks,
+						desc: t().fallbacksDesc,
 						visible: anthropic,
 						control: { type: "toggle", key: "useFallbacks" },
 					},
 					{
-						name: "自定义 API 地址",
-						desc: "留空使用官方地址 https://api.anthropic.com。",
+						name: t().customApi,
+						desc: t().customApiDesc,
 						visible: anthropic,
 						control: { type: "text", key: "baseURL", placeholder: "https://api.anthropic.com" },
 					},
 					{
-						name: "参考上下文长度",
-						desc: "随选区一起发送、供模型理解前后文的笔记字符数。笔记更短时发送全文。",
+						name: t().context,
+						desc: t().contextDesc,
 						control: {
 							type: "number",
 							key: "contextChars",
 							min: 0,
 							step: 1000,
-							validate: (v) => (Number.isFinite(v) && v >= 0 ? undefined : "请输入不小于 0 的数字。"),
+							validate: (v) => (Number.isFinite(v) && v >= 0 ? undefined : t().contextInvalid),
 						},
 					},
 				],
 			},
 			{
 				type: "group",
-				heading: "触发与动画",
+				heading: t().hTrigger,
 				items: [
 					{
-						name: "双击 Alt / Option (⌥) 审阅选中文字",
-						desc: "连续按两次 Alt（Mac 上是 Option ⌥，中间不按其他键）直接修正选区内的事实性错误。也可以在「快捷键」里给「审阅修改」命令另外绑键。",
+						name: t().doubleAlt,
+						desc: t().doubleAltDesc,
 						control: { type: "toggle", key: "doubleAlt" },
 					},
 					{
-						name: "双击间隔（毫秒）",
+						name: t().doubleAltMs,
 						control: { type: "slider", key: "doubleAltMs", min: 150, max: 600, step: 25 },
 					},
 					{
-						name: "反馈卡片停留时间",
-						desc: "审阅结束后，这段文字下方的反馈卡片显示多久；0 = 一直显示，点右上角 × 关闭。",
+						name: t().feedbackTime,
+						desc: t().feedbackTimeDesc,
 						control: {
 							type: "slider",
 							key: "feedbackSeconds",
 							min: 0,
 							max: 60,
 							step: 5,
-							displayFormat: (v) => (v === 0 ? "一直显示" : `${v} 秒`),
+							displayFormat: (v) => (v === 0 ? t().feedbackForever : t().seconds(v)),
 						},
 					},
 					{
-						name: "高亮显示为浅蓝",
-						desc: "改动处会以 ==高亮== 语法写入笔记。开启后笔记里所有高亮都显示为浅蓝色，而不是主题默认的黄色。",
-						control: { type: "toggle", key: "blueHighlight" },
+						name: t().highlight,
+						desc: t().highlightDesc,
+						control: { type: "dropdown", key: "highlightColor", options: { gray: t().hlGray, blue: t().hlBlue, theme: t().hlTheme } },
 					},
 					{
-						name: "颗粒动画",
-						desc: "改动的文字散成颗粒再重新聚成新文字。动画中按 Esc 可跳过；系统开启“减少动态效果”时自动关闭。",
+						name: t().animate,
+						desc: t().animateDesc,
 						control: { type: "toggle", key: "animate" },
 					},
 				],
@@ -237,7 +241,7 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 	getControlValue(key: string): unknown {
 		const s = this.plugin.settings;
 		if (key === "preset") return presetOf(s);
-		if (key === "modelChoice") return this.editingCustomModel || !(s.model in MODEL_OPTIONS) ? "custom" : s.model;
+		if (key === "modelChoice") return this.editingCustomModel || !(s.model in modelOptions()) ? "custom" : s.model;
 		return (s as unknown as Record<string, unknown>)[key];
 	}
 
@@ -267,7 +271,7 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 			rebuild = key === "provider";
 		}
 		await this.plugin.saveSettings();
-		if (key === "blueHighlight") this.plugin.applyHighlightColor();
+		if (key === "highlightColor") this.plugin.applyHighlightColor();
 		if (rebuild) this.update();
 	}
 }

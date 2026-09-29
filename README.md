@@ -1,23 +1,23 @@
 # Veritas Howler - Note Proofreader
 
-Select a passage in a note and let an LLM check it for **factual errors**. Your own wording is kept; only what is actually wrong gets fixed. The corrected passage dissolves into ink particles and re-forms in place, changed spots are marked with a light-blue `==highlight==`, and a short teacher-style note appears right under the passage: what you got right, or what was wrong and why.
+Select a passage in a note and let an LLM check it for **factual errors**. Your own wording is kept; only what is actually wrong gets fixed. The corrected passage dissolves into ink particles and re-forms in place, changed spots are marked with a soft gray `==highlight==`, and a short teacher-style note appears right under the passage: what you got right, or what was wrong and why.
 
 *中文说明见下方。*
 
 ## Usage
 
-- **Right-click → Veritas Howler → 审阅修改 (Review)**: asks for optional extra instructions (remembered for next time), then reviews. Leave it empty to fix factual errors only.
+- **Right-click → Veritas Howler → Review**: asks for optional extra instructions (remembered for next time), then reviews. Leave it empty to fix factual errors only.
 - **Double-tap Alt** (**Option ⌥** on Mac): reviews the selection immediately, facts only, no dialog.
-- **Right-click → Veritas Howler → 取消高亮 (Remove highlights)**: strips the `==` markers in the selection and keeps the text.
+- **Right-click → Veritas Howler → Remove highlights**: strips the `==` markers in the selection and keeps the text.
 - Nothing asks for confirmation. `Ctrl/Cmd+Z` undoes a whole review in one step. With no selection, nothing happens.
 
-While waiting, the selection shimmers in light blue. When the result arrives:
+While waiting, the selection shimmers softly. When the result arrives:
 
 - The passage dissolves into particles and re-forms with the corrections; press `Esc` to skip the animation.
 - If nothing needed changing, the passage flashes green twice.
 - A frosted-glass card under the passage gives the verdict: the key point you got right, or what was wrong, why, and the correct idea, plus at most one pointed remark. Close it with the round × in its corner.
 
-The command palette also has *审阅修改（仅事实错误）*, *审阅修改（填写额外要求）*, *取消高亮（选区）*, *取消正在进行的审阅*, and *演示动画（不调用 API）* (inserts a sample passage and plays the correction without calling any API; one `Ctrl+Z` removes it).
+The command palette also has *Review (facts only)*, *Review with extra instructions*, *Remove highlights in selection*, *Cancel the running review*, and *Demo animation (no API call)* (inserts a sample passage and plays the correction without calling any API; one `Ctrl+Z` removes it).
 
 ## Installation
 
@@ -50,7 +50,7 @@ You can also switch to **Anthropic Claude** (default Claude Opus 5; more expensi
 | Context length | How many characters of the surrounding note are sent for context. |
 | Double-tap Alt / interval | Turn the shortcut off, or tune how fast the two taps must be. |
 | Feedback card duration | How long the card stays; 0 keeps it until you close it. |
-| Light-blue highlights | Shows every `==highlight==` in your vault in light blue. |
+| Highlight colour | How every `==highlight==` in your vault looks: gray (default), light blue, or the theme's own colour. |
 | Particle animation | Master switch. Animation timings are fixed in `src/params.ts`. |
 
 ## Network use and privacy
@@ -76,7 +76,7 @@ MIT
 
 ## 中文说明
 
-选中一段笔记，让大模型检查其中的**事实性错误**。以你的原话为准，只改确实错的地方。修正后的段落会化成墨色颗粒、再在原处重新聚成；改动处写入浅蓝色 `==高亮==`；段落正下方出现一张毛玻璃卡片，像老师一样告诉你：哪里对、对在哪，或者哪里错、为什么错。
+选中一段笔记，让大模型检查其中的**事实性错误**。以你的原话为准，只改确实错的地方。修正后的段落会化成墨色颗粒、再在原处重新聚成；改动处写入浅灰色 `==高亮==`（设置里可改为浅蓝或主题默认色）；段落正下方出现一张毛玻璃卡片，像老师一样告诉你：哪里对、对在哪，或者哪里错、为什么错。
 
 - **右键 → Veritas Howler → 审阅修改**：可填写额外要求（会记住上次内容），留空则只修正事实错误。
 - **双击 Alt**（Mac 上是 **Option ⌥**）：直接只修正事实错误，不弹窗。
@@ -84,4 +84,5 @@ MIT
 - 都不需要确认；不满意 `Ctrl/Cmd+Z` 一步还原。没有选中文字时什么都不做。
 - 默认使用 DeepSeek（OpenAI 兼容接口），也可切换 Gemini、OpenRouter、自定义接口或 Anthropic Claude。
 - 每次审阅会把选中段落及周围笔记内容发送给你选择的服务商，除此之外不发送任何数据；API key 存在 Obsidian 密钥库中，不写入仓库文件。
+- 界面语言跟随 Obsidian：Obsidian 设为中文时显示中文，其余语言显示英文。
 - 需要 Obsidian 1.13.0 及以上。

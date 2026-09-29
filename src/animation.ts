@@ -1,6 +1,7 @@
 import { EditorState, Extension, StateEffect, StateField, Transaction } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, layer, LayerMarker, WidgetType } from "@codemirror/view";
 import type { Hunk } from "./diff";
+import { t } from "./i18n";
 import type { AnimationParams } from "./params";
 import { Glyph, measureGlyphs, ParticleLayer, textWidth } from "./particles";
 
@@ -150,7 +151,7 @@ class FeedbackMarker implements LayerMarker {
 		const card = createDiv({ cls: ["np-feedback", `np-feedback-${kind}`] });
 		card.createDiv({ cls: "np-feedback-title", text: title });
 		if (body) card.createDiv({ cls: "np-feedback-body", text: body });
-		const close = card.createEl("button", { cls: "np-feedback-close", text: "×", attr: { type: "button", "aria-label": "关闭" } });
+		const close = card.createEl("button", { cls: "np-feedback-close", text: "×", attr: { type: "button", "aria-label": t().close } });
 		// The scroller turns mousedown into cursor moves; keep clicks and text selection inside the card.
 		card.addEventListener("mousedown", (e) => e.stopPropagation());
 		close.addEventListener("mousedown", (e) => e.preventDefault());

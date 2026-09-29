@@ -2,3 +2,5 @@ node_modules/
 main.js
 data.json
 *.log
+# Eval test sets and results contain note text; never commit them.
+eval-data/

@@ -1,18 +1,30 @@
-/* Fixed light blue, independent of the theme's accent colour. */
+/* Tint of the waiting shimmer and of fading marks: gray from the theme's text colour (so it
+   works in light and dark themes), or light blue when chosen in the settings. */
 .np-pending,
 .np-changed,
 .np-flash,
 .np-hidden {
-	--np-blue: 110, 180, 255;
+	--np-tint: var(--text-normal);
+	--np-tint-base: 7%;
+	--np-tint-band: 16%;
+	--np-tint-mark: 20%;
 	border-radius: 3px;
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 }
 
-/* Waiting for Claude: a light sweeping shimmer over the passage. */
+body.np-hl-blue .np-pending,
+body.np-hl-blue .np-changed {
+	--np-tint: rgb(110, 180, 255);
+	--np-tint-base: 16%;
+	--np-tint-band: 42%;
+	--np-tint-mark: 32%;
+}
+
+/* Waiting for the model: a soft shimmer sweeping over the passage. */
 .np-pending {
-	background-color: rgba(var(--np-blue), 0.16);
-	background-image: linear-gradient(90deg, transparent 0%, rgba(var(--np-blue), 0.42) 50%, transparent 100%);
+	background-color: color-mix(in srgb, var(--np-tint) var(--np-tint-base), transparent);
+	background-image: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--np-tint) var(--np-tint-band), transparent) 50%, transparent 100%);
 	background-size: 200% 100%;
 	animation: np-shimmer 1.5s linear infinite;
 }
@@ -29,13 +41,13 @@
 	opacity: 0;
 }
 
-/* After the rewrite: changed spots sit on light blue that fades away... */
+/* After the rewrite: changed spots sit on a tint that fades away... */
 .np-changed {
 	animation: np-hold var(--np-hold, 2000ms) ease-in forwards;
 }
 
 @keyframes np-hold {
-	0%, 35% { background-color: rgba(var(--np-blue), 0.32); }
+	0%, 35% { background-color: color-mix(in srgb, var(--np-tint) var(--np-tint-mark), transparent); }
 	100% { background-color: transparent; }
 }
 
@@ -68,10 +80,18 @@
 	transition: width var(--np-shift, 350ms) ease-in-out;
 }
 
-/* Changed text is written as ==highlight==; show highlights light blue when asked. */
-.np-blue-highlight .cm-highlight,
-.np-blue-highlight .markdown-rendered mark,
-.np-blue-highlight .markdown-preview-view mark {
+/* Changed text is written as ==highlight==; show highlights gray or light blue as chosen
+   ("theme default" leaves the theme's own highlight colour alone). */
+.np-hl-gray .cm-highlight,
+.np-hl-gray .markdown-rendered mark,
+.np-hl-gray .markdown-preview-view mark {
+	background-color: color-mix(in srgb, var(--text-normal) 13%, transparent);
+	color: inherit;
+}
+
+.np-hl-blue .cm-highlight,
+.np-hl-blue .markdown-rendered mark,
+.np-hl-blue .markdown-preview-view mark {
 	background-color: rgba(110, 180, 255, 0.32);
 	color: inherit;
 }

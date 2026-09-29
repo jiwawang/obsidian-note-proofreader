@@ -1,16 +1,17 @@
-import { Editor, MarkdownFileInfo, MarkdownView, Menu, MenuItem, Notice, Plugin } from "obsidian";
+import { Editor, getLanguage, MarkdownFileInfo, MarkdownView, Menu, MenuItem, Notice, Plugin } from "obsidian";
 import { Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { animateRevision, clearPending, flashChecked, isAnimating, markPending, proofreaderExtension, showFeedback } from "./animation";
-import { ReviewError, reviewPassage, ReviewResult } from "./claude";
+import { reviewPassage } from "./claude";
+import { keepOuterWhitespace, ReviewError, ReviewInput, ReviewResult } from "./prompt";
 import { reviewPassageOpenAI } from "./openai";
 import { applyPermanentMark, computeHunks, joinRevised } from "./diff";
+import { setLanguage, t } from "./i18n";
 import { ExtraRequirementsModal } from "./modal";
 import { DEFAULT_PARAMS } from "./params";
 import { DEFAULT_SETTINGS, ProofreaderSettings, ProofreaderSettingTab } from "./settings";
 
-const DEMO_ORIGINAL = "光合作用是植物在夜晚把二氧化碳转化为氧气的过程，主要发生在线粒体里。说白了就是植物吃阳光。";
-const DEMO_REVISED = "光合作用是植物在光照下把二氧化碳和水转化为有机物并放出氧气的过程，主要发生在叶绿体里。说白了就是植物吃阳光。";
+const HIGHLIGHT_CLASSES = ["np-hl-gray", "np-hl-blue", "np-hl-theme"];
 
 export default class NoteProofreaderPlugin extends Plugin {
 	declare settings: ProofreaderSettings;
@@ -19,6 +20,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 	private altAlone = false;
 
 	async onload() {
+		setLanguage(getLanguage());
 		await this.loadSettings();
 		this.applyHighlightColor();
 		this.addSettingTab(new ProofreaderSettingTab(this.app, this));
@@ -26,7 +28,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "review",
-			name: "审阅修改（仅事实错误）",
+			name: t().cmdReview,
 			editorCheckCallback: (checking, editor, ctx) => {
 				if (!editor.somethingSelected()) return false;
 				if (!checking) void this.run(editor, ctx, "");
@@ -35,7 +37,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "review-with-requirements",
-			name: "审阅修改（填写额外要求）",
+			name: t().cmdReviewExtra,
 			editorCheckCallback: (checking, editor, ctx) => {
 				if (!editor.somethingSelected()) return false;
 				if (!checking) void this.askAndRun(editor, ctx);
@@ -44,7 +46,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "remove-highlights",
-			name: "取消高亮（选区）",
+			name: t().cmdRemoveHighlights,
 			editorCheckCallback: (checking, editor) => {
 				if (!editor.somethingSelected()) return false;
 				if (!checking) this.removeHighlights(editor);
@@ -53,7 +55,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "cancel",
-			name: "取消正在进行的审阅",
+			name: t().cmdCancel,
 			editorCheckCallback: (checking, editor) => {
 				const cm = cmOf(editor);
 				const job = cm && this.jobs.get(cm);
@@ -64,7 +66,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "demo",
-			name: "演示动画（不调用 API）",
+			name: t().cmdDemo,
 			editorCallback: (editor) => void this.demo(editor),
 		});
 
@@ -78,11 +80,11 @@ export default class NoteProofreaderPlugin extends Plugin {
 					// setSubmenu exists at runtime but isn't in the public typings; fall back to flat items.
 					const sub = (item as MenuItem & { setSubmenu?: () => Menu }).setSubmenu?.();
 					const target = sub ?? menu;
-					if (!sub) item.setTitle(`${name}：审阅修改`).onClick(() => void this.askAndRun(editor, ctx));
-					else target.addItem((i) => i.setTitle("审阅修改").setIcon("spell-check").onClick(() => void this.askAndRun(editor, ctx)));
+					if (!sub) item.setTitle(`${name}${t().sep}${t().menuReview}`).onClick(() => void this.askAndRun(editor, ctx));
+					else target.addItem((i) => i.setTitle(t().menuReview).setIcon("spell-check").onClick(() => void this.askAndRun(editor, ctx)));
 					target.addItem((i) =>
 						i
-							.setTitle(sub ? "取消高亮" : `${name}：取消高亮`)
+							.setTitle(sub ? t().menuRemoveHighlights : `${name}${t().sep}${t().menuRemoveHighlights}`)
 							.setIcon("eraser")
 							.setSection("selection")
 							.onClick(() => this.removeHighlights(editor)),
@@ -115,17 +117,25 @@ export default class NoteProofreaderPlugin extends Plugin {
 
 	onunload() {
 		for (const job of this.jobs.values()) job.abort();
-		document.body.classList.remove("np-blue-highlight");
+		document.body.classList.remove(...HIGHLIGHT_CLASSES);
 	}
 
-	/** Changed text is written as ==highlight==; this recolours highlights light blue to match. */
+	/** Changed text is written as ==highlight==; this picks how highlights (and the waiting shimmer) look. */
 	applyHighlightColor() {
-		document.body.classList.toggle("np-blue-highlight", this.settings.blueHighlight);
+		const cls = `np-hl-${this.settings.highlightColor}`;
+		for (const c of HIGHLIGHT_CLASSES) document.body.classList.toggle(c, c === cls);
 	}
 
 	async loadSettings() {
 		const saved = (await this.loadData()) as Partial<ProofreaderSettings> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...saved };
+		// 0.3.x had an on/off "light blue" switch, on by default. Off meant the theme's colour;
+		// on (the old default) moves to the new default, gray.
+		const legacy = saved as { blueHighlight?: boolean } | null;
+		if (typeof legacy?.blueHighlight === "boolean" && !saved?.highlightColor) {
+			this.settings.highlightColor = legacy.blueHighlight ? "gray" : "theme";
+		}
+		delete (this.settings as { blueHighlight?: boolean }).blueHighlight;
 	}
 
 	async saveSettings() {
@@ -151,21 +161,21 @@ export default class NoteProofreaderPlugin extends Plugin {
 	private async run(editor: Editor, ctx: MarkdownView | MarkdownFileInfo, extra: string) {
 		const cm = cmOf(editor);
 		if (!cm) {
-			new Notice("当前编辑器不受支持。");
+			new Notice(t().unsupportedEditor);
 			return;
 		}
 		if (this.jobs.has(cm) || isAnimating(cm)) {
-			new Notice("这篇笔记正在处理中，请稍候。");
+			new Notice(t().busy);
 			return;
 		}
 		const secretId = this.settings.apiKeySecret;
 		const apiKey = secretId ? this.app.secretStorage.getSecret(secretId) : null;
 		if (!apiKey) {
-			new Notice(`请先在「${this.manifest.name}」设置中配置 API key。`);
+			new Notice(t().needKey(this.manifest.name));
 			return;
 		}
 		if (this.settings.provider === "openai" && (!this.settings.openaiBaseURL || !this.settings.openaiModel)) {
-			new Notice(`请先在「${this.manifest.name}」设置中填写接口地址和模型 ID。`);
+			new Notice(t().needEndpoint(this.manifest.name));
 			return;
 		}
 
@@ -182,10 +192,12 @@ export default class NoteProofreaderPlugin extends Plugin {
 
 		let result: ReviewResult;
 		try {
-			const input = {
-				passage: original,
-				context: buildContext(doc, from, to, this.settings.contextChars),
+			const input: ReviewInput = {
 				noteTitle: ctx.file?.basename ?? "",
+				doc,
+				from,
+				to,
+				contextChars: this.settings.contextChars,
 				extra,
 			};
 			result =
@@ -193,7 +205,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 					? await reviewPassageOpenAI(this.settings, apiKey, input, controller.signal)
 					: await reviewPassage(this.settings, apiKey, input, controller.signal);
 		} catch (e) {
-			new Notice(e instanceof ReviewError ? e.message : `出错了：${String(e)}`, 8000);
+			new Notice(e instanceof ReviewError ? e.message : t().failed(String(e)), 8000);
 			return;
 		} finally {
 			this.jobs.delete(cm);
@@ -207,21 +219,21 @@ export default class NoteProofreaderPlugin extends Plugin {
 		// The note may have been edited while Claude was working; find the passage again.
 		const start = locate(cm.state.doc.toString(), original, from);
 		if (start < 0) {
-			new Notice("原文在等待期间被改动，这次的结果没有应用。", 6000);
+			new Notice(t().changedWhileWaiting, 6000);
 			return;
 		}
 		let revised = keepOuterWhitespace(original, result.revised);
 		const ms = this.settings.feedbackSeconds * 1000;
 		if (revised === original) {
 			flashChecked(cm, start, start + original.length, DEFAULT_PARAMS);
-			showFeedback(cm, start + original.length, { kind: "ok", title: "没有发现问题", body: result.explanation }, ms);
+			showFeedback(cm, start + original.length, { kind: "ok", title: t().cardOk, body: result.explanation }, ms);
 			return;
 		}
 		const hunks = applyPermanentMark(computeHunks(original, revised), DEFAULT_PARAMS.mark);
 		revised = joinRevised(hunks);
 		const changes = hunks.filter((h) => h.type === "change").length;
 		await animateRevision(cm, start, original, revised, hunks, DEFAULT_PARAMS, this.settings.animate);
-		showFeedback(cm, start + revised.length, { kind: "fixed", title: `已修改 ${changes} 处`, body: result.explanation }, ms);
+		showFeedback(cm, start + revised.length, { kind: "fixed", title: t().cardFixed(changes), body: result.explanation }, ms);
 	}
 
 	/** Strips ==highlight== markers inside the selection, as one undoable edit. */
@@ -229,7 +241,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 		const text = editor.getSelection();
 		const cleaned = text.replace(/==([^=\n]+?)==/g, "$1");
 		if (cleaned === text) {
-			new Notice("选区内没有高亮。");
+			new Notice(t().noHighlights);
 			return;
 		}
 		editor.replaceSelection(cleaned);
@@ -243,13 +255,13 @@ export default class NoteProofreaderPlugin extends Plugin {
 		const line = cm.state.doc.lineAt(head);
 		const at = line.to;
 		const prefix = line.text ? "\n\n" : "";
-		const original = prefix + DEMO_ORIGINAL;
+		const original = prefix + t().demoOriginal;
 		// Inserted outside history so the final edit in animateRevision restores an empty region on undo.
 		cm.dispatch({ changes: { from: at, insert: original }, annotations: Transaction.addToHistory.of(false) });
 		markPending(cm, at + prefix.length, at + original.length);
 		await new Promise((r) => window.setTimeout(r, 1500));
 		clearPending(cm);
-		const hunks = applyPermanentMark(computeHunks(original, prefix + DEMO_REVISED), DEFAULT_PARAMS.mark);
+		const hunks = applyPermanentMark(computeHunks(original, prefix + t().demoRevised), DEFAULT_PARAMS.mark);
 		await animateRevision(cm, at, original, joinRevised(hunks), hunks, DEFAULT_PARAMS, this.settings.animate, "");
 	}
 }
@@ -257,35 +269,6 @@ export default class NoteProofreaderPlugin extends Plugin {
 function cmOf(editor: Editor): EditorView | undefined {
 	// Obsidian's Editor wraps a CodeMirror 6 EditorView but doesn't type it.
 	return (editor as unknown as { cm?: EditorView }).cm;
-}
-
-/** The note text with the passage wrapped in <selection>, trimmed to about maxChars around it. */
-function buildContext(doc: string, from: number, to: number, maxChars: number): string {
-	let start = 0;
-	let end = doc.length;
-	if (doc.length > maxChars) {
-		const budget = Math.max(0, maxChars - (to - from));
-		const before = Math.min(from, Math.max(Math.floor(budget / 2), budget - (doc.length - to)));
-		start = from - before;
-		end = Math.min(doc.length, to + (budget - before));
-	}
-	return (
-		(start > 0 ? "[…]\n" : "") +
-		doc.slice(start, from) +
-		"<selection>" +
-		doc.slice(from, to) +
-		"</selection>" +
-		doc.slice(to, end) +
-		(end < doc.length ? "\n[…]" : "")
-	);
-}
-
-/** Models tend to trim or add edge whitespace; keep the selection's own so it fits back in. */
-function keepOuterWhitespace(original: string, revised: string): string {
-	if (!revised.trim()) return original;
-	const lead = original.match(/^\s*/)![0];
-	const trail = original.match(/\s*$/)![0];
-	return lead + revised.trim() + trail;
 }
 
 /** Position of `text` in `doc`, preferring the occurrence closest to `hint`; -1 if gone. */
