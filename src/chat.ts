@@ -90,3 +90,33 @@ export function describeHttpError(status: number, text: string): string {
 	if (status >= 500) return t().serverDown(suffix);
 	return t().requestFailed(status, suffix);
 }
+
+// ---------- model catalogue (GET /models) ----------
+
+export function modelsURL(baseURL: string): string {
+	return `${baseURL.replace(/\/+$/, "")}/models`;
+}
+
+/** Catalogue entries that can't answer a chat request (embeddings, speech, images, video...). */
+const NON_CHAT = /embed|whisper|tts|transcribe|dall-e|imagen|veo|lyria|moderation|realtime|audio|aqa|image-generation/i;
+
+/**
+ * Model IDs from an OpenAI-style `{ data: [{ id }] }` list, chat models only, sorted.
+ * Gemini's compatible endpoint prefixes IDs with "models/", which chat requests don't need.
+ */
+export function parseModelList(status: number, text: string): string[] {
+	if (status >= 400) throw new ReviewError(describeHttpError(status, text));
+	type Entry = { id?: unknown; name?: unknown };
+	let data: { data?: Entry[]; models?: Entry[] };
+	try {
+		data = JSON.parse(text) as typeof data;
+	} catch {
+		throw new ReviewError(t().notJson);
+	}
+	const raw = (data.data ?? data.models ?? [])
+		.map((m) => (typeof m.id === "string" ? m.id : typeof m.name === "string" ? m.name : ""))
+		.map((id) => id.replace(/^models\//, ""))
+		.filter(Boolean);
+	const chat = raw.filter((id) => !NON_CHAT.test(id));
+	return [...new Set(chat.length ? chat : raw)].sort((a, b) => a.localeCompare(b));
+}

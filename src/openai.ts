@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { buildChatBody, chatURL, ChatBody, readChatReply, rejectsResponseFormat, withoutResponseFormat } from "./chat";
+import { buildChatBody, chatURL, ChatBody, modelsURL, parseModelList, readChatReply, rejectsResponseFormat, withoutResponseFormat } from "./chat";
 import { t } from "./i18n";
 import { PROMPT_LAYOUT, ReviewError, ReviewInput, ReviewResult } from "./prompt";
 import type { ProofreaderSettings } from "./settings";
@@ -43,4 +43,15 @@ async function post(url: string, apiKey: string, body: ChatBody) {
 	} catch (e) {
 		throw new ReviewError(t().cantConnect(e instanceof Error ? e.message : String(e)));
 	}
+}
+
+/** The provider's model catalogue (GET {base}/models), chat models only. Throws ReviewError. */
+export async function listModels(baseURL: string, apiKey: string): Promise<string[]> {
+	let res;
+	try {
+		res = await requestUrl({ url: modelsURL(baseURL), method: "GET", headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {}, throw: false });
+	} catch (e) {
+		throw new ReviewError(t().cantConnect(e instanceof Error ? e.message : String(e)));
+	}
+	return parseModelList(res.status, res.text);
 }

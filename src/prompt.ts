@@ -13,6 +13,8 @@ export interface ReviewInput {
 	contextChars: number;
 	/** The author's one-off instructions for this run; empty for a facts-only pass. */
 	extra: string;
+	/** The author's own rules replacing the built-in ones (settings); empty = built-in. */
+	customRules?: string;
 }
 
 export interface ReviewResult {
@@ -37,7 +39,11 @@ export type PromptLayout = "inline" | "prefix";
 /** The layout the plugin uses. */
 export const PROMPT_LAYOUT: PromptLayout = "inline";
 
-export const SYSTEM_PROMPT = `You are a fact-checker working inside the author's personal note-taking app (Obsidian). The author selects a passage from one of their notes; you check it and return a version that goes straight back into the note in place of the selection, without the author reviewing it first.
+/**
+ * The built-in rules: what to fix, what to leave alone, and how to write the explanation.
+ * Users can replace these with their own prompt in the settings.
+ */
+const RULES_CORE = `You are a fact-checker working inside the author's personal note-taking app (Obsidian). The author selects a passage from one of their notes; you check it and return a version that goes straight back into the note in place of the selection, without the author reviewing it first.
 
 The author's own words take priority. They wrote the passage in their own understanding and voice, and they want to keep it that way. Your only job is to catch things that are actually wrong.
 
@@ -48,18 +54,37 @@ Change text only when:
 
 Leave everything else exactly as written, character for character: typos, grammar, punctuation, awkward phrasing, repetition, informal tone, mixed languages, the author's own opinions, simplifications the author clearly made on purpose, and anything you merely find suboptimal. Never add new facts, examples, caveats or explanations. Never reorganize.
 
-When you are not sure whether something is wrong, because it depends on recent events, private context, or knowledge you lack, leave it unchanged.
+When you are not sure whether something is wrong, because it depends on recent events, private context, or knowledge you lack, leave it unchanged.`;
 
-Preserve Markdown and Obsidian syntax exactly: headings, list markers and indentation, [[wikilinks]], ![[embeds]], #tags, links, footnotes, callouts, LaTeX ($...$ and $$...$$), inline code and code blocks, and the line-break structure.
-
-In "revised", return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.
-
-"explanation" is feedback from a good teacher to the author (plain text, no Markdown or LaTeX), written in the passage's own language. Up to 5 sentences; shorter is better when there is nothing more worth saying. Rules:
+const RULES_EXPLANATION = `"explanation" is feedback from a good teacher to the author (plain text, no Markdown or LaTeX), written in the passage's own language. Up to 5 sentences; shorter is better when there is nothing more worth saying. Rules:
 - Open with a verdict, not a pleasantry: state directly whether the passage is right, and what exactly is right or wrong. Do not use stock openers such as 「你的思路没有问题」 or "Your reasoning holds up".
 - If it is right: name the key insight the author got (the one thing that makes the reasoning work), in one or two sentences, using the author's own terms and metaphors. Do not paraphrase the whole passage back.
 - If something was corrected: say what was wrong and why it is wrong (the root of the confusion, not just the replacement value), then the correct understanding in one sentence.
 - Then, only if there is one, add a single pointed remark a teacher would add: a condition the claim depends on, a case where it breaks down, an easy confusion to watch for, or an imprecision you deliberately left in the text. This may go beyond what you changed. If nothing genuinely useful comes to mind, stop instead of padding.
 - Never comment on typos, grammar, style or wording.`;
+
+/** The default rules as one editable text (what "Load default prompt" fills in). */
+export const DEFAULT_RULES = `${RULES_CORE}\n\n${RULES_EXPLANATION}`;
+
+/** What the plugin needs back, whatever the rules say. Always part of the system prompt. */
+const OUTPUT_CONTRACT = `Preserve Markdown and Obsidian syntax exactly: headings, list markers and indentation, [[wikilinks]], ![[embeds]], #tags, links, footnotes, callouts, LaTeX ($...$ and $$...$$), inline code and code blocks, and the line-break structure.
+
+In "revised", return only the passage: no surrounding context, no quotation marks, no commentary. If nothing needs to change, return the original passage unchanged.`;
+
+/** A minimal description of "explanation" for custom rules that don't define it. */
+const EXPLANATION_FORMAT = `"explanation" is a short note to the author in plain text (no Markdown or LaTeX), written in the passage's own language.`;
+
+export const SYSTEM_PROMPT = `${RULES_CORE}\n\n${OUTPUT_CONTRACT}\n\n${RULES_EXPLANATION}`;
+
+/**
+ * The system prompt for a run: the built-in one, or the user's rules followed by the fixed
+ * output contract. A custom prompt identical to the default rules counts as the default.
+ */
+export function systemPromptFor(customRules = ""): string {
+	const custom = customRules.trim();
+	if (!custom || custom === DEFAULT_RULES.trim()) return SYSTEM_PROMPT;
+	return `${custom}\n\n${OUTPUT_CONTRACT}\n\n${EXPLANATION_FORMAT}`;
+}
 
 /** Appended for providers without schema-enforced output. */
 export const JSON_INSTRUCTION =
@@ -76,8 +101,10 @@ export function buildPrompts(input: ReviewInput, layout: PromptLayout, jsonInstr
 	const extra = input.extra.trim();
 	const passage = passageOf(input);
 
+	const base = systemPromptFor(input.customRules);
+
 	if (layout === "inline") {
-		let system = SYSTEM_PROMPT;
+		let system = base;
 		if (extra) {
 			system += `\n\nExtra instructions from the author for this run (apply these in addition to fixing errors):\n${extra}`;
 		}
@@ -95,7 +122,7 @@ Check the passage (marked with <selection> inside the note above) and return it 
 	}
 
 	// "prefix": nothing that changes between reviews of the same note comes before the note text.
-	const system = jsonInstruction ? `${SYSTEM_PROMPT}\n\n${jsonInstruction}` : SYSTEM_PROMPT;
+	const system = jsonInstruction ? `${base}\n\n${jsonInstruction}` : base;
 	const { start, end } = stableWindow(input.doc.length, input.from, input.to, input.contextChars);
 	const note =
 		(start > 0 ? "[…]\n" : "") + input.doc.slice(start, end) + (end < input.doc.length ? "\n[…]" : "");

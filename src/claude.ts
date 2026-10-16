@@ -92,6 +92,21 @@ export async function reviewPassage(
 	return result;
 }
 
+/**
+ * The Claude models this key can use, newest first, via the Models API (the SDK pages through
+ * the list). Labels are the models' display names. Throws ReviewError.
+ */
+export async function listClaudeModels(apiKey: string, baseURL: string): Promise<Array<{ id: string; label: string }>> {
+	const client = new Anthropic({ apiKey, baseURL: baseURL || undefined, dangerouslyAllowBrowser: true });
+	const models: Array<{ id: string; label: string }> = [];
+	try {
+		for await (const m of client.models.list()) models.push({ id: m.id, label: m.display_name || m.id });
+	} catch (e) {
+		throw new ReviewError(describeApiError(e));
+	}
+	return models;
+}
+
 function describeApiError(e: unknown): string {
 	if (e instanceof Anthropic.APIUserAbortError) return t().cancelled;
 	if (e instanceof Anthropic.AuthenticationError) return t().claudeBadKey;

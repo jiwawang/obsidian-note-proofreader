@@ -45,11 +45,13 @@ You can also switch to **Anthropic Claude** (default Claude Opus 5; more expensi
 | Setting | What it does |
 |---|---|
 | Provider / API key | OpenAI-compatible endpoint or Anthropic Claude. |
-| Preset / base URL / model ID | For OpenAI-compatible endpoints. |
+| Preset / base URL / model | For OpenAI-compatible endpoints. Once the API key is set, the model list is read from the provider (`GET /models`); pick one, or choose Custom… to type an ID. |
+| Model | Both providers list their models once the API key is set (Claude through the Models API, newest first); before that, Claude shows a short recommended list. |
 | Effort / fallback model / custom URL | Claude only. |
 | Context length | How many characters of the surrounding note are sent for context. |
+| Custom prompt | Your own review rules instead of the built-in prompt (empty = built-in). The page icon loads the built-in prompt for editing; the output format the plugin needs is always added. |
 | Double-tap Alt / interval | Turn the shortcut off, or tune how fast the two taps must be. |
-| Feedback card duration | How long the card stays; 0 keeps it until you close it. |
+| Hide the feedback card automatically / duration | Off keeps the card until you close it with ×; on hides it after the chosen time. |
 | Highlight colour | How every `==highlight==` in your vault looks: gray (default), light blue, or the theme's own colour. |
 | Particle animation | Master switch. Animation timings are fixed in `src/params.ts`. |
 

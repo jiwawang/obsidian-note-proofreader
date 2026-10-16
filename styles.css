@@ -108,6 +108,26 @@ body.np-hl-blue .np-changed {
 	.np-changed, .np-flash { animation-duration: 1ms; }
 }
 
+/* ---------- Custom prompt editor (settings): full width under its label ---------- */
+
+.np-prompt-setting {
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.np-prompt-setting .setting-item-control {
+	flex: 1 1 100%;
+	align-items: flex-start;
+}
+
+.np-prompt-setting textarea {
+	flex: 1;
+	min-height: 16em;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.5;
+}
+
 /* ---------- "Extra requirements" prompt ---------- */
 
 .np-extra-modal .np-extra-input {

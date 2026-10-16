@@ -136,6 +136,11 @@ export default class NoteProofreaderPlugin extends Plugin {
 			this.settings.highlightColor = legacy.blueHighlight ? "gray" : "theme";
 		}
 		delete (this.settings as { blueHighlight?: boolean }).blueHighlight;
+		// Up to 0.4.0, a duration of 0 meant "stay until closed"; that's now the auto-hide switch.
+		if (saved && saved.feedbackAutoHide === undefined && saved.feedbackSeconds === 0) {
+			this.settings.feedbackAutoHide = false;
+			this.settings.feedbackSeconds = DEFAULT_SETTINGS.feedbackSeconds;
+		}
 	}
 
 	async saveSettings() {
@@ -199,6 +204,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 				to,
 				contextChars: this.settings.contextChars,
 				extra,
+				customRules: this.settings.customPrompt,
 			};
 			result =
 				this.settings.provider === "openai"
@@ -223,7 +229,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 			return;
 		}
 		let revised = keepOuterWhitespace(original, result.revised);
-		const ms = this.settings.feedbackSeconds * 1000;
+		const ms = this.settings.feedbackAutoHide ? this.settings.feedbackSeconds * 1000 : 0;
 		if (revised === original) {
 			flashChecked(cm, start, start + original.length, DEFAULT_PARAMS);
 			showFeedback(cm, start + original.length, { kind: "ok", title: t().cardOk, body: result.explanation }, ms);
