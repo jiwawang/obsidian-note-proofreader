@@ -57,8 +57,12 @@ const en = {
 	hModel: "Model provider",
 	provider: "Provider",
 	providerOpenAI: "OpenAI-compatible API (DeepSeek / Gemini / OpenRouter…)",
-	keyDescAnthropic: "Stored in Obsidian's secret storage, never in your vault files. Create one at console.anthropic.com.",
-	keyDescOpenAI: "API key for the selected provider. Stored in Obsidian's secret storage, never in your vault files.",
+	keyDescAnthropic: "Claude API key, kept separately from the other providers' keys. Stored in Obsidian's secret storage, never in your vault files. Create one at console.anthropic.com.",
+	keyDescOpenAI: (name: string) =>
+		`API key for ${name || "this endpoint"}. Each provider keeps its own key. Stored in Obsidian's secret storage, never in your vault files.`,
+	shareAcrossVaults: "Use in other vaults on this device",
+	shareAcrossVaultsDesc:
+		"Set up once: when you install the plugin in another vault, it starts with these settings and API keys. The copy stays on this device, with keys encrypted by the system keychain. Turning this off deletes the copy.",
 	preset: "Preset",
 	endpoint: "Endpoint URL",
 	endpointDesc: "OpenAI-compatible base URL; the plugin appends /chat/completions.",
@@ -169,8 +173,11 @@ const zh: Strings = {
 	hModel: "模型服务",
 	provider: "服务商",
 	providerOpenAI: "OpenAI 兼容接口（DeepSeek / Gemini / OpenRouter…）",
-	keyDescAnthropic: "保存在 Obsidian 的密钥库中，不会写进仓库文件。在 console.anthropic.com 创建。",
-	keyDescOpenAI: "所选服务商的 API key，保存在 Obsidian 的密钥库中，不会写进仓库文件。",
+	keyDescAnthropic: "Claude 的 API key，和其他服务商的 key 分开保存。保存在 Obsidian 的密钥库中，不会写进仓库文件。在 console.anthropic.com 创建。",
+	keyDescOpenAI: (name) => `${name || "该接口"}的 API key。每个服务商分别保存自己的 key。保存在 Obsidian 的密钥库中，不会写进仓库文件。`,
+	shareAcrossVaults: "在本机其他仓库中沿用",
+	shareAcrossVaultsDesc:
+		"只需配置一次：在本机其他仓库安装本插件时，自动沿用这里的设置和 API key。这份副本只存在本机，key 由系统密钥库加密。关闭后会删除这份副本。",
 	preset: "预设",
 	endpoint: "接口地址",
 	endpointDesc: "OpenAI 兼容的 base URL，插件会在后面加上 /chat/completions。",

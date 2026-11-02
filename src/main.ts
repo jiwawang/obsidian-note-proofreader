@@ -9,7 +9,8 @@ import { applyPermanentMark, computeHunks, joinRevised } from "./diff";
 import { setLanguage, t } from "./i18n";
 import { ExtraRequirementsModal } from "./modal";
 import { DEFAULT_PARAMS } from "./params";
-import { DEFAULT_SETTINGS, ProofreaderSettings, ProofreaderSettingTab } from "./settings";
+import { DEFAULT_SETTINGS, keySecretOf, keySlot, ProofreaderSettings, ProofreaderSettingTab } from "./settings";
+import { adoptShared, clearShared, writeShared } from "./shared";
 
 const HIGHLIGHT_CLASSES = ["np-hl-gray", "np-hl-blue", "np-hl-theme"];
 
@@ -136,15 +137,43 @@ export default class NoteProofreaderPlugin extends Plugin {
 			this.settings.highlightColor = legacy.blueHighlight ? "gray" : "theme";
 		}
 		delete (this.settings as { blueHighlight?: boolean }).blueHighlight;
+		// Up to 0.4.1, one key served every provider. Hand it to the provider it belongs to:
+		// Anthropic keys start with "sk-ant-"; anything else goes to the OpenAI-compatible preset.
+		const legacyKey = (saved as { apiKeySecret?: string } | null)?.apiKeySecret;
+		if (legacyKey && !saved?.keySecrets) {
+			const value = this.app.secretStorage.getSecret(legacyKey) ?? "";
+			const slot = value.startsWith("sk-ant-") ? "anthropic" : keySlot({ ...this.settings, provider: "openai" });
+			this.settings.keySecrets = { [slot]: legacyKey };
+		}
+		delete (this.settings as { apiKeySecret?: string }).apiKeySecret;
 		// Up to 0.4.0, a duration of 0 meant "stay until closed"; that's now the auto-hide switch.
 		if (saved && saved.feedbackAutoHide === undefined && saved.feedbackSeconds === 0) {
 			this.settings.feedbackAutoHide = false;
 			this.settings.feedbackSeconds = DEFAULT_SETTINGS.feedbackSeconds;
 		}
+		// Set up once per device: a vault without keys starts from what another vault left.
+		if (this.settings.shareAcrossVaults) {
+			if (adoptShared(this.app, this.settings)) await this.saveData(this.settings);
+			writeShared(this.app, this.settings);
+		}
+		// Keys edited in Obsidian's keychain (same ID, new value) reach the shared copy too.
+		this.registerEvent(
+			this.app.secretStorage.on("changed", () => {
+				if (this.settings.shareAcrossVaults) writeShared(this.app, this.settings);
+			}),
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		if (this.settings.shareAcrossVaults) writeShared(this.app, this.settings);
+	}
+
+	/** Turning sharing off removes the device-wide copy; turning it on writes it again. */
+	async setShareAcrossVaults(on: boolean) {
+		this.settings.shareAcrossVaults = on;
+		if (!on) clearShared();
+		await this.saveSettings();
 	}
 
 	private reviewActiveSelection() {
@@ -173,7 +202,7 @@ export default class NoteProofreaderPlugin extends Plugin {
 			new Notice(t().busy);
 			return;
 		}
-		const secretId = this.settings.apiKeySecret;
+		const secretId = keySecretOf(this.settings);
 		const apiKey = secretId ? this.app.secretStorage.getSecret(secretId) : null;
 		if (!apiKey) {
 			new Notice(t().needKey(this.manifest.name));

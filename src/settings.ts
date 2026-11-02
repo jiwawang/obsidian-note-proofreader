@@ -15,8 +15,11 @@ export type HighlightColor = "gray" | "blue" | "theme";
 
 export interface ProofreaderSettings {
 	provider: Provider;
-	/** ID of the secret in Obsidian's keychain that holds the API key of the selected provider. */
-	apiKeySecret: string;
+	/**
+	 * IDs of secrets in Obsidian's keychain holding the API keys, one per provider: "anthropic",
+	 * or an OpenAI-compatible preset ("deepseek", "gemini", "openrouter", "custom").
+	 */
+	keySecrets: Record<string, string>;
 	/** Anthropic: custom base URL (empty = official). */
 	baseURL: string;
 	/** Anthropic model. */
@@ -39,11 +42,13 @@ export interface ProofreaderSettings {
 	lastExtra: string;
 	/** The user's own review rules replacing the built-in prompt; empty = built-in. */
 	customPrompt: string;
+	/** Keep a device-wide copy of the settings and keys that new vaults start from (see shared.ts). */
+	shareAcrossVaults: boolean;
 }
 
 export const DEFAULT_SETTINGS: ProofreaderSettings = {
 	provider: "openai",
-	apiKeySecret: "",
+	keySecrets: {},
 	baseURL: "",
 	model: "claude-opus-5",
 	openaiBaseURL: "https://api.deepseek.com",
@@ -59,6 +64,7 @@ export const DEFAULT_SETTINGS: ProofreaderSettings = {
 	feedbackSeconds: 20,
 	lastExtra: "",
 	customPrompt: "",
+	shareAcrossVaults: true,
 };
 
 /** Ready-made OpenAI-compatible endpoints. Base URL + a cheap default model. */
@@ -97,6 +103,16 @@ const claudeShortlist = (): ModelEntry[] => [
 /** Which preset the current OpenAI-compatible base URL matches, or "custom". */
 function presetOf(s: ProofreaderSettings): string {
 	return Object.entries(OPENAI_PRESETS).find(([id, p]) => id !== "custom" && p.baseURL === s.openaiBaseURL)?.[0] ?? "custom";
+}
+
+/** Which key the current provider uses: "anthropic", or the OpenAI-compatible preset's id. */
+export function keySlot(s: ProofreaderSettings): string {
+	return s.provider === "anthropic" ? "anthropic" : presetOf(s);
+}
+
+/** Secret ID of the current provider's API key ("" when none is set). */
+export function keySecretOf(s: ProofreaderSettings): string {
+	return s.keySecrets[keySlot(s)] ?? "";
 }
 
 /** Dropdown value that switches the model row to a free-text field. */
@@ -170,11 +186,12 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 						desc:
 							s.provider === "anthropic"
 								? t().keyDescAnthropic
-								: t().keyDescOpenAI,
+								: t().keyDescOpenAI(presetOf(s) === "custom" ? "" : OPENAI_PRESETS[presetOf(s)].name),
 						render: (setting) => {
 							setting.addComponent((el) =>
-								new SecretComponent(this.app, el).setValue(s.apiKeySecret).onChange(async (v) => {
-									s.apiKeySecret = v;
+								new SecretComponent(this.app, el).setValue(keySecretOf(s)).onChange(async (v) => {
+									// Each provider keeps its own key, so switching providers switches keys.
+									s.keySecrets = { ...s.keySecrets, [keySlot(s)]: v };
 									await this.plugin.saveSettings();
 									// A new key may unlock the provider's model list.
 									this.update();
@@ -214,6 +231,11 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 							step: 1000,
 							validate: (v) => (Number.isFinite(v) && v >= 0 ? undefined : t().contextInvalid),
 						},
+					},
+					{
+						name: t().shareAcrossVaults,
+						desc: t().shareAcrossVaultsDesc,
+						control: { type: "toggle", key: "shareAcrossVaults" },
 					},
 				],
 			},
@@ -383,7 +405,8 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 		const s = this.plugin.settings;
 		const claude = s.provider === "anthropic";
 		const base = claude ? s.baseURL.trim() : s.openaiBaseURL;
-		const key = s.apiKeySecret ? (this.app.secretStorage.getSecret(s.apiKeySecret) ?? "") : "";
+		const secret = keySecretOf(s);
+		const key = secret ? (this.app.secretStorage.getSecret(secret) ?? "") : "";
 		// OpenRouter lists its models publicly; everyone else wants a key.
 		const needsKey = claude || presetOf(s) !== "openrouter";
 		if ((!claude && !base) || (needsKey && !key)) return (this.catalog = null);
@@ -417,6 +440,7 @@ export class ProofreaderSettingTab extends PluginSettingTab {
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		const s = this.plugin.settings;
+		if (key === "shareAcrossVaults") return this.plugin.setShareAcrossVaults(value === true);
 		// Some choices reveal or hide other rows, so the tab re-reads its definitions afterwards.
 		let rebuild = false;
 		if (key === "preset") {

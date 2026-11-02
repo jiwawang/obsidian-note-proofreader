@@ -46,9 +46,11 @@ You can also switch to **Anthropic Claude** (default Claude Opus 5; more expensi
 |---|---|
 | Provider / API key | OpenAI-compatible endpoint or Anthropic Claude. |
 | Preset / base URL / model | For OpenAI-compatible endpoints. Once the API key is set, the model list is read from the provider (`GET /models`); pick one, or choose Custom… to type an ID. |
+| API key | Each provider (Claude, and each OpenAI-compatible preset) keeps its own key; switching providers switches keys. |
 | Model | Both providers list their models once the API key is set (Claude through the Models API, newest first); before that, Claude shows a short recommended list. |
 | Effort / fallback model / custom URL | Claude only. |
 | Context length | How many characters of the surrounding note are sent for context. |
+| Use in other vaults on this device | On by default. Set the plugin up once: when you install it in another vault, it starts with the same settings and API keys. A vault that already has a key keeps its own settings and only gets the keys it lacks. Turning this off deletes the shared copy. |
 | Custom prompt | Your own review rules instead of the built-in prompt (empty = built-in). The page icon loads the built-in prompt for editing; the output format the plugin needs is always added. |
 | Double-tap Alt / interval | Turn the shortcut off, or tune how fast the two taps must be. |
 | Hide the feedback card automatically / duration | Off keeps the card until you close it with ×; on hides it after the chosen time. |
@@ -59,6 +61,7 @@ You can also switch to **Anthropic Claude** (default Claude Opus 5; more expensi
 
 - Each review sends **the selected passage and the surrounding note text** (about 20,000 characters by default, adjustable) to the provider you configured: DeepSeek, Google, OpenRouter, Anthropic, or your custom URL. Nothing else is sent, and there is no telemetry.
 - You supply your own API key and pay your provider directly. The key is kept in Obsidian's secret storage, not in your vault files.
+- So you don't have to set up every vault, the plugin keeps one copy of its settings and keys in the app's local storage on this device (keys encrypted with the system keychain where available, as Obsidian's own secret storage does). It never leaves the device and isn't part of any vault, so sync and git don't see it. Turn off **Use in other vaults on this device** to delete it.
 - Checking relies on the model's own knowledge; it does not search the web. When the model is unsure, it leaves the text alone.
 
 ## Build from source
